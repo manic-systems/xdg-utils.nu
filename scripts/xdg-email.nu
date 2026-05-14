@@ -92,12 +92,10 @@ def --env open_kde [mailto: string, attach: string] {
     }
 
     let kde_ver = ($env.KDE_SESSION_VERSION? | default "")
-    let command = if ($kde_ver | is-empty) {
-        "kmailservice"
-    } else if ($kde_ver == "4") {
-        "kde-open"
-    } else {
-        $"kde-open($kde_ver)"
+    let command = match $kde_ver {
+        "" => "kmailservice"
+        "4" => "kde-open"
+        _ => $"kde-open($kde_ver)"
     }
 
     let result = if (which $command | is-not-empty) {

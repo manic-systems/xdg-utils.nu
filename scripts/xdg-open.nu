@@ -73,14 +73,16 @@ def --env open_darwin [url: string] {
 
 # Open on KDE
 def --env open_kde [url: string] {
-    let result = if not ($env.KDE_SESSION_VERSION? == null) {
-        match $env.KDE_SESSION_VERSION {
-            "4" => { ^kde-open $url | complete }
-            "5" => { ^kde-open5 $url | complete }
-            "6" => { ^kde-open $url | complete }
-        }
-    } else {
+    let version = ($env.KDE_SESSION_VERSION? | default "")
+    let cmd = match $version {
+        "" => "kfmclient"
+        "5" => "kde-open5"
+        _ => "kde-open"
+    }
+    let result = if $cmd == "kfmclient" {
         ^kfmclient exec $url | complete
+    } else {
+        ^$cmd $url | complete
     }
 
     if ($result.exit_code) == 0 {

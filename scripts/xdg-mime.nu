@@ -38,35 +38,19 @@ def --env update_mime_database [mode: string] {
 
 # Query MIME type using KDE
 def --env info_kde [filename: string] {
-    if not ($env.KDE_SESSION_VERSION? == null) {
-        match $env.KDE_SESSION_VERSION {
-            "4" => {
-                let result = (^kmimetypefinder $filename | complete)
-                if ($result.exit_code) == 0 {
-                    print (($result.stdout) | split row "\n" | where { not ($it | is-empty) } | get 0)
-                    exit_success
-                }
-            }
-            "5" => {
-                let result = (^kmimetypefinder5 $filename | complete)
-                if ($result.exit_code) == 0 {
-                    print (($result.stdout) | split row "\n" | where { not ($it | is-empty) } | get 0)
-                    exit_success
-                }
-            }
-            "6" => {
-                let result = (^kmimetypefinder $filename | complete)
-                if ($result.exit_code) == 0 {
-                    print (($result.stdout) | split row "\n" | where { not ($it | is-empty) } | get 0)
-                    exit_success
-                }
-            }
-        }
-    } else {
+    let version = ($env.KDE_SESSION_VERSION? | default "")
+    if ($version | is-empty) {
         let result = (^kfile $filename | complete)
         let parsed = ($result.stdout | split row "(" | get 1? | default "" | split row ")" | get 0? | default "")
         if not ($parsed | is-empty) {
             print $parsed
+            exit_success
+        }
+    } else {
+        let tool = if $version == "5" { "kmimetypefinder5" } else { "kmimetypefinder" }
+        let result = (^$tool $filename | complete)
+        if ($result.exit_code) == 0 {
+            print (($result.stdout) | lines | where { ($in | is-not-empty) } | get 0? | default "")
             exit_success
         }
     }
