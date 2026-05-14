@@ -626,8 +626,9 @@ awk -v\"hostname=($hostname)\" -v\"file_arg=($file)\" -v\"uri_arg=($uri)\" '($AW
 def --env search_desktop_file [default: string, dir: string, target: string, target_uri: string = ""] {
     let candidate = ($dir | path join $default)
     if not (($candidate | path type) == "file" and ($candidate | path parse | get extension) == "desktop") {
-        # try vendor/app.desktop format (replace first - with /)
-        let alt_path = ($dir | path join ($default | ^sed -r 's/-/\//') | complete | get stdout | str trim)
+        # Try vendor/app.desktop, deriving it by swapping the first `-` for a `/`.
+        let alt_name = ($default | str replace "-" "/")
+        let alt_path = ($dir | path join $alt_name)
         if (($alt_path | path type) == "file" and ($alt_path | path parse | get extension) == "desktop") {
             open_with_desktop_file $alt_path $target $target_uri
             exit_success
