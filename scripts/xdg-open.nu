@@ -195,24 +195,21 @@ def --env open_enlightenment [url: string] {
 
 # Open using D-Bus portal
 def --env open_gdbus [url: string] {
-    let result = if (is_file_url_or_path $url) {
+    # Normalize local paths into file:// URIs.
+    let target = if (is_file_url_or_path $url) {
         let file = (file_url_to_path $url)
         check_input_file $file
-
-        (^gdbus call --session
-            --dest org.freedesktop.portal.Desktop
-            --object-path /org/freedesktop/portal/desktop
-            --method org.freedesktop.portal.OpenURI.OpenFile
-            --timeout 5
-            "" "3" => {} 3< $file | complete)
+        $"file://(($file | path expand))"
     } else {
-        (^gdbus call --session
-            --dest org.freedesktop.portal.Desktop
-            --object-path /org/freedesktop/portal/desktop
-            --method org.freedesktop.portal.OpenURI.OpenURI
-            --timeout 5
-            "" $url {} | complete)
+        $url
     }
+
+    let result = (^gdbus call --session
+        --dest org.freedesktop.portal.Desktop
+        --object-path /org/freedesktop/portal/desktop
+        --method org.freedesktop.portal.OpenURI.OpenURI
+        --timeout 5
+        "" $target "{}" | complete)
 
     if ($result.exit_code) == 0 {
         exit_success

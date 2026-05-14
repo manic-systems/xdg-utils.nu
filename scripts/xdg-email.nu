@@ -210,7 +210,7 @@ def --env open_gdbus [mailto: string] {
         --dest org.freedesktop.portal.Desktop
         --object-path /org/freedesktop/portal/desktop
         --method org.freedesktop.portal.OpenURI.OpenURI
-        "" $mailto {} | complete)
+        "" $mailto "{}" | complete)
 
     if ($result.exit_code) == 0 {
         exit_success
