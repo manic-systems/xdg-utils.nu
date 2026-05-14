@@ -20,11 +20,7 @@ def is_file_url_or_path [url_or_path: string] {
 # Get hostname
 def --env get_hostname [] {
     if ($env.HOSTNAME? | default "" | is-empty) {
-        if (which hostname | is-not-empty) {
-            $env.HOSTNAME = (^hostname | complete | get stdout | str trim)
-        } else {
-            $env.HOSTNAME = (^uname -n | complete | get stdout | str trim)
-        }
+        $env.HOSTNAME = (sys host | get hostname)
     }
     $env.HOSTNAME? | default ""
 }

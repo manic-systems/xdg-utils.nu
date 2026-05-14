@@ -19,7 +19,7 @@ def get_screensaver_file []: nothing -> string {
         let user = ($env.USER? | default "unknown")
         $"/tmp/xdg-screensaver-($user)-($display)"
     } else {
-        let host = (^hostname | complete | get stdout | str trim)
+        let host = (sys host | get hostname)
         $"/tmp/.xdg-screensaver-($host)-($display)"
     }
 }

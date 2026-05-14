@@ -10,7 +10,6 @@
   glib,
   gnugrep,
   gnused,
-  hostname,
   perlPackages,
   procps,
   which,
@@ -28,7 +27,6 @@
     glib.bin
     gnugrep
     gnused
-    hostname
     nushell
     perl-with-deps
     procps
