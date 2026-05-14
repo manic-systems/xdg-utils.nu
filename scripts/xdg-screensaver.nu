@@ -138,6 +138,7 @@ while (1) {
 
 # Perform action (called from screensaver implementations for DPMS handling)
 def --env perform_action [action: string, screensaver_file: string] {
+    if (which xset | is-empty) { return }
     if $action == "resume" {
         if ($"($screensaver_file).dpms" | path type) == "file" {
             rm --force $"($screensaver_file).dpms"
@@ -146,7 +147,7 @@ def --env perform_action [action: string, screensaver_file: string] {
     }
 
     if $action == "reset" {
-        if (^xset -q | complete | get stdout | ^grep -F "DPMS is Enabled" | complete).exit_code == 0 {
+        if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
             ^xset -dpms | complete | ignore
             ^xset +dpms | complete | ignore
             ^xset dpms force on | complete | ignore
@@ -252,9 +253,11 @@ def --env screensaver_freedesktop [action: string, window_id: string, screensave
         "status" => {
             let raw = (^dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call --print-reply --reply-timeout=2000 /ScreenSaver org.freedesktop.ScreenSaver.GetActive | complete)
             let status = ($raw.stdout | ^grep -F "boolean" | complete | get stdout | split row " " | get 4? | default "")
-            if $status == "true" { print "enabled" }
-            else if $status == "false" { print "disabled" }
-            else {
+            if $status == "true" {
+                print "enabled"
+            } else if $status == "false" {
+                print "disabled"
+            } else {
                 print --stderr $"ERROR: dbus org.freedesktop.ScreenSaver.GetActive returned '($status)'"
             }
             $raw.exit_code
@@ -274,9 +277,11 @@ def --env screensaver_kde3 [action: string]: nothing -> int {
         "status" => {
             let raw = (^dcop kdesktop KScreensaverIface isEnabled | complete)
             let status = ($raw.stdout | str trim)
-            if $status == "true" { print "enabled" }
-            else if $status == "false" { print "disabled" }
-            else {
+            if $status == "true" {
+                print "enabled"
+            } else if $status == "false" {
+                print "disabled"
+            } else {
                 print --stderr $"ERROR: kdesktop KScreensaverIface isEnabled returned '($status)'"
             }
             $raw.exit_code
@@ -287,13 +292,16 @@ def --env screensaver_kde3 [action: string]: nothing -> int {
 
 # XServer screensaver timeout query
 def xset_screensaver_timeout []: nothing -> int {
+    if (which xset | is-empty) { return (-1) }
     let output = (^xset q | complete | get stdout)
     let line = ($output | lines | where { $in | str contains "timeout:" } | get 0? | default "")
     if ($line | is-empty) { return (-1) }
-    try { $line | ^grep -oP '(?<=timeout:\s{0,10})\d+' | complete | get stdout | str trim | into int } catch { -1 }
+    let parsed = ($line | parse --regex 'timeout:\s+(?P<n>\d+)' | get n? | get 0? | default "")
+    if ($parsed | is-empty) { -1 } else { try { $parsed | into int } catch { -1 } }
 }
 
 def --env screensaver_xserver [action: string, screensaver_file: string]: nothing -> int {
+    if (which xset | is-empty) { return 1 }
     let mv_cmd = get_mv_cmd
     match $action {
         "suspend" => {
@@ -315,13 +323,16 @@ def --env screensaver_xserver [action: string, screensaver_file: string]: nothin
         "reset" => { (^xset s reset | complete).exit_code }
         "status" => {
             let timeout = xset_screensaver_timeout
-            if $timeout > 0 { print "enabled" }
-            else if $timeout == 0 { print "disabled" }
-            else {
+            if $timeout > 0 {
+                print "enabled"
+                0
+            } else if $timeout == 0 {
+                print "disabled"
+                0
+            } else {
                 print --stderr "ERROR: xset q did not report the screensaver timeout"
-                return 1
+                1
             }
-            0
         }
         _ => { 1 }
     }
@@ -344,8 +355,11 @@ def --env screensaver_gnome_screensaver [action: string, window_id: string, scre
         "status" => {
             let raw = (^dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call --print-reply --reply-timeout=2000 /org/gnome/ScreenSaver org.gnome.ScreenSaver.GetActive | complete)
             let status = ($raw.stdout | ^grep -F "boolean" | complete | get stdout | split row " " | get 4? | default "")
-            if $status == "true" or $status == "false" { print "enabled" }
-            else { print "disabled" }
+            if $status == "true" or $status == "false" {
+                print "enabled"
+            } else {
+                print "disabled"
+            }
             $raw.exit_code
         }
         _ => { 1 }
@@ -386,9 +400,13 @@ def --env screensaver_cinnamon_screensaver [action: string, window_id: string, s
         "status" => {
             let raw = (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call --print-reply --reply-timeout=2000 /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.GetActive | complete)
             let status = ($raw.stdout | ^grep -F "boolean" | complete | get stdout | split row " " | get 4? | default "")
-            if $status == "true" { print "enabled" }
-            else if $status == "false" { print "disabled" }
-            else { print --stderr $"ERROR: dbus org.cinnamon.ScreenSaver.GetActive returned '($status)'" }
+            if $status == "true" {
+                print "enabled"
+            } else if $status == "false" {
+                print "disabled"
+            } else {
+                print --stderr $"ERROR: dbus org.cinnamon.ScreenSaver.GetActive returned '($status)'"
+            }
             $raw.exit_code
         }
         _ => { 1 }
@@ -494,35 +512,43 @@ def --wrapped main [...args] {
     let screensaver_file = get_screensaver_file
 
     # Detect screensaver implementations
+    let has_dbus_send = (which dbus-send | is-not-empty)
+    let dbus_owner_exists = {|name|
+        (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner $"string:($name)" | complete).exit_code == 0
+    }
+
     # Consider "xscreensaver" a separate DE
-    if (^xscreensaver-command -version | complete | get stdout | ^grep -F XScreenSaver | complete).exit_code == 0 {
+    if (which xscreensaver-command | is-not-empty) and (^xscreensaver-command -version | complete | get stdout | str contains "XScreenSaver") {
         $env.DE = "xscreensaver"
     }
     # Consider "freedesktop-screensaver" a separate DE
-    if (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.freedesktop.ScreenSaver | complete).exit_code == 0 {
+    if $has_dbus_send and (do $dbus_owner_exists "org.freedesktop.ScreenSaver") {
         $env.DE = "freedesktop_screensaver"
     }
     # Consider "gnome-screensaver" a separate DE
-    if (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.gnome.ScreenSaver | complete).exit_code == 0 {
+    if $has_dbus_send and (do $dbus_owner_exists "org.gnome.ScreenSaver") {
         $env.DE = "gnome_screensaver"
     }
     # Consider "mate-screensaver" a separate DE
-    if (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.mate.ScreenSaver | complete).exit_code == 0 {
+    if $has_dbus_send and (do $dbus_owner_exists "org.mate.ScreenSaver") {
         $env.DE = "mate_screensaver"
     }
     # Consider "cinnamon-screensaver" a separate DE
-    if (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.cinnamon.ScreenSaver | complete).exit_code == 0 {
+    if $has_dbus_send and (do $dbus_owner_exists "org.cinnamon.ScreenSaver") {
         $env.DE = "cinnamon"
     }
-    # Consider "xautolock" a separate DE, and probe with `which` so we don't
-    # actually enable the autolocker as a side effect of detecting it
+    # Consider "xautolock" a separate DE, and probe with `which` rather than `xautolock -enable`,
+    # which would otherwise enable the autolocker as a side effect just by detecting it.
     if (which xautolock | is-not-empty) {
         $env.DE = "xautolock_screensaver"
     }
     # Consider "xss-lock" a separate DE
-    if (which xss-lock | is-not-empty) {
+    if (which xss-lock | is-not-empty) and (which ps | is-not-empty) {
         let xdg_sid = ($env.XDG_SESSION_ID? | default "")
-        if (^ps x -o cmd | complete | get stdout | ^grep -E "^xss-lock" | complete | get stdout | ^grep -E $"-s ($xdg_sid)|--session=($xdg_sid)" | complete).exit_code == 0 {
+        let ps_out = (^ps x -o cmd | complete | get stdout)
+        let xss_lines = ($ps_out | lines | where { $in | str starts-with "xss-lock" })
+        let matches = ($xss_lines | where {|l| ($l | str contains $"-s ($xdg_sid)") or ($l | str contains $"--session=($xdg_sid)") })
+        if not ($matches | is-empty) {
             $env.DE = "xss-lock_screensaver"
         }
     }
@@ -580,8 +606,8 @@ def --wrapped main [...args] {
     }
 
     # Handle DPMS on suspend
-    if not ($env.DISPLAY? | default "" | is-empty) and $action == "suspend" {
-        if (^xset -q | complete | get stdout | ^grep -F "DPMS is Enabled" | complete).exit_code == 0 {
+    if not ($env.DISPLAY? | default "" | is-empty) and $action == "suspend" and (which xset | is-not-empty) {
+        if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
             let tmpfile = (^mktemp | complete | get stdout | str trim)
             let mv_cmd = get_mv_cmd
             if $mv_cmd == "mv -T" { ^mv -T $tmpfile $"($screensaver_file).dpms" } else { ^mv $tmpfile $"($screensaver_file).dpms" }
