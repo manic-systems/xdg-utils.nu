@@ -7,7 +7,6 @@
   gawk,
   glib,
   gnugrep,
-  gnused,
   procps,
   xdg-user-dirs,
   shared-mime-info,
@@ -19,7 +18,6 @@
     gawk
     glib.bin
     gnugrep
-    gnused
     nushell
     procps
     xdg-user-dirs

@@ -40,6 +40,22 @@ export def first_word [text: string] {
     if not ($parts | is-empty) { $parts.0 } else { "" }
 }
 
+# Decode a percent-encoded string, walking the bytes so that multi-byte UTF-8
+# sequences survive intact.
+export def percent_decode [s: string]: nothing -> string {
+    let hex_pairs = ($s | parse --regex '%(?P<h>[a-fA-F0-9]{2})' | get h)
+    if ($hex_pairs | is-empty) { return $s }
+    let parts = ($s | split row --regex '%[a-fA-F0-9]{2}')
+    let binary = ($hex_pairs
+        | enumerate
+        | reduce --fold (($parts | get 0) | encode utf-8) {|it, acc|
+            let byte = ($it.item | decode hex | collect)
+            let next = (($parts | get ($it.index + 1) | default "") | encode utf-8)
+            $acc ++ $byte ++ $next
+        })
+    $binary | decode
+}
+
 export def is-readable [path: string]: nothing -> bool {
     (^test -r $path | complete).exit_code == 0
 }

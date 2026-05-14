@@ -37,8 +37,7 @@ def --env file_url_to_path [file: string] {
         $f = ($f | split row "#" | get 0)
         $f = ($f | split row "?" | get 0)
 
-        let printf_cmd = if (which printf | is-not-empty) { "printf" } else { "/usr/bin/printf" }
-        $f = (^$printf_cmd ($f | ^sed -e "s@%\\([a-f0-9A-F]\\{2\\}\\)@\\\\x\\1@g" | complete | get stdout) | complete | get stdout | str trim)
+        $f = (percent_decode $f)
         return $f
     }
     $file
@@ -647,7 +646,7 @@ def --env open_generic_xdg_mime [file: string, filetype: string, url: string = "
 
 # Open an url using the x-scheme-handler/<scheme> dummy mimetype
 def --env open_generic_xdg_x_scheme_handler [url: string] {
-    let scheme = ($url | ^sed -n "s/^\\([[:alpha:]][[:alnum:]+\\.-]*\\):.*/\\1/p" | complete | get stdout | str trim)
+    let scheme = ($url | parse --regex '^(?P<s>[[:alpha:]][[:alnum:]+.\-]*):' | get s? | get 0? | default "")
     if ($scheme | is-empty) { return }
 
     let filetype = $"x-scheme-handler/($scheme)"
