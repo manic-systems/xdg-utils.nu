@@ -132,11 +132,15 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
     let default_dir = if $version > 4 {
         get_xdg_config_home
     } else if ($env.KDE_SESSION_VERSION? | default "") == "4" {
-        let result = (^kde4-config --path xdgdata-apps | complete)
-        if ($result.exit_code) == 0 { (($result.stdout) | split row ":" | get 0) } else { "" }
-    } else {
+        if (which kde4-config | is-empty) { "" } else {
+            let result = (^kde4-config --path xdgdata-apps | complete)
+            if ($result.exit_code) == 0 { (($result.stdout) | split row ":" | get 0) } else { "" }
+        }
+    } else if (which kde-config | is-not-empty) {
         let result = (^kde-config --path config | complete)
         if ($result.exit_code) == 0 { (($result.stdout) | split row ":" | get 0) } else { "" }
+    } else {
+        ""
     }
 
     if ($default_dir | is-empty) {
@@ -900,7 +904,9 @@ def --wrapped main [...args] {
     detectDE
 
     if $action == "makedefault" {
-        if ($args | is-empty) {
+        # Skip $args.0, which is the .desktop filename already captured above.
+        let mimetypes = ($args | skip 1)
+        if ($mimetypes | is-empty) {
             exit_failure_syntax "mimetype argument missing"
         }
         let binary = (desktop_file_to_binary $filename)
@@ -910,19 +916,21 @@ def --wrapped main [...args] {
             exit_failure_file_missing
         }
 
-        for mimetype_arg in $args {
+        let de = ($env.DE? | default "")
+        for mimetype_arg in $mimetypes {
             if ($mimetype_arg | str starts-with "-") {
                 exit_failure_syntax $"unexpected option '($mimetype_arg)'"
             }
-            match $env.DE {
-                "lxqt" => { make_default_lxqt $filename $mimetype_arg }
-                _ => {}
+            if $de == "lxqt" {
+                make_default_lxqt $filename $mimetype_arg
             }
-            make_default_kde $filename $mimetype_arg
+            if $de == "kde" {
+                make_default_kde $filename $mimetype_arg
+            }
             make_default_generic $filename $mimetype_arg
         }
 
-        if $env.DE == "kde" {
+        if $de == "kde" {
             update_kde_cache
         }
         exit_success
