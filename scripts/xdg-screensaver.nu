@@ -72,8 +72,9 @@ BEGIN { FS=":" }
         }
     }
     do_unlockfile $screensaver_file
-    let cmd_str = ($cmd_args | str join " ")
-    ^sh -c $"while [ -f '($screensaver_file)' ]; do ($cmd_str) 2>/dev/null; sleep 50; done &"
+    # Detach a poll loop that keeps re-running the keep-alive command while the
+    # marker file exists. We feed both values to the shell as positional args.
+    ^sh -c 'sf="$1"; shift; while [ -f "$sf" ]; do "$@" 2>/dev/null; sleep 50; done &' -- $screensaver_file ...$cmd_args
 }
 
 # DBus process for freedesktop/gnome screensaver suspend (runs in background)
@@ -131,7 +132,8 @@ while (1) {
   exit 0 unless $found;
 }
 '
-    ^sh -c $"perl -e '($perl_script)' '($window_id)' '($screensaver_file)' '($dbus_service)' '($dbus_path)' &"
+    # Script and identifiers come in as positional args, never interpolated.
+    ^sh -c 'perl -e "$1" "$2" "$3" "$4" "$5" </dev/null >/dev/null 2>&1 &' -- $perl_script $window_id $screensaver_file $dbus_service $dbus_path
 }
 
 # Perform action (called from screensaver implementations for DPMS handling)
@@ -225,11 +227,17 @@ END { exit already_tracked }
         return
     }
 
-    let xprop_pid = (^sh -c $"'($xprop)' -id ($window_id) -spy > /dev/null 2>&1 & echo $!" | complete | get stdout | str trim)
+    # Spawn xprop in the background through sh so we can capture its PID,
+    # passing the values through positional args.
+    let xprop_pid = (^sh -c '"$1" -id "$2" -spy </dev/null >/dev/null 2>&1 & echo $!' -- $xprop $window_id | complete | get stdout | str trim)
     $"($window_id):($xprop_pid)\n" | save --append $tmpfile
     if $mv_cmd == "mv -T" { ^mv -T $tmpfile $screensaver_file } else { ^mv $tmpfile $screensaver_file }
     do_unlockfile $screensaver_file
-    ^sh -c $"wait ($xprop_pid) 2>/dev/null" | complete | ignore
+    # `wait` only works on the parent shell's children, and ours is already gone,
+    # so poll the PID directly.
+    while (^kill -0 $xprop_pid o+e>| complete | get exit_code) == 0 {
+        sleep 1sec
+    }
     cleanup_suspend $window_id $screensaver_file
 }
 

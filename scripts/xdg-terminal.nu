@@ -107,14 +107,15 @@ def --env terminal_generic [command: string] {
     let terminal_exec = (which $term | get 0?.path | default "")
 
     if not ($terminal_exec | is-empty) and (is-executable $terminal_exec) {
+        # screen and urxvt want one argv entry per shell word, not the joined string.
+        let cmd_words = ($command | split row " " | where { ($in | is-not-empty) })
         let result = if ($command | is-empty) {
             ^$terminal_exec | complete
-        # screen and urxvt won't do their own parsing of quoted arguments
         } else if $term == "screen" {
-            # screen has an incompatible meaning for -e
-            ^sh -c $"exec ($terminal_exec) ($command)" | complete
+            # screen overloads -e, so pass the command directly.
+            ^$terminal_exec ...$cmd_words | complete
         } else if ($term == "urxvt") or ($term == "rxvt-unicode") or ($term == "rxvt") {
-            ^sh -c $"exec ($terminal_exec) -e ($command)" | complete
+            ^$terminal_exec -e ...$cmd_words | complete
         } else {
             ^$terminal_exec -e $command | complete
         }

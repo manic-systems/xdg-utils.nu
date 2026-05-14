@@ -75,7 +75,6 @@ def --wrapped main [...args] {
         "other"
     }
 
-    let my_umask = "077"
     mut desktop_dir = ($env.HOME | path join "Desktop")
     if (which xdg-user-dir | is-not-empty) {
         $desktop_dir = (^xdg-user-dir DESKTOP | complete | get stdout | str trim)
@@ -101,7 +100,8 @@ def --wrapped main [...args] {
     # KDE desktop path handling
     if not ($desktop_dir_kde | is-empty) {
         if not (($desktop_dir_kde | path type) == "dir") {
-            ^sh -c $"umask ($my_umask) && mkdir -p '($desktop_dir_kde)'"
+            ^mkdir -p $desktop_dir_kde
+            ^chmod 700 $desktop_dir_kde
         }
         # Is the KDE desktop dir != $HOME/Desktop?
         let kde_realpath = (xdg_realpath $desktop_dir_kde)
@@ -124,7 +124,11 @@ def --wrapped main [...args] {
     if $action == "install" {
         for dir in [$desktop_dir, $desktop_dir_kde, $desktop_dir_gnome] {
             if not ($dir | is-empty) {
-                ^sh -c $"umask ($my_umask) && mkdir -p '($dir)' && cp '($desktop_file)' '($dir | path join $basefile)' && chmod u+x '($dir | path join $basefile)'"
+                let target = ($dir | path join $basefile)
+                ^mkdir -p $dir
+                ^chmod 700 $dir
+                ^cp $desktop_file $target
+                ^chmod 700 $target
             }
         }
     } else if $action == "uninstall" {

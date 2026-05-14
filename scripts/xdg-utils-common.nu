@@ -418,7 +418,7 @@ export def --env detectDE [] {
 # It also always returns 1 in KDE 3.4 and earlier
 # Simply return 0 in such case
 export def --env kfmclient_fix_exit_code [exit_code: int] {
-    let version_result = (^sh -c 'LC_ALL=C.UTF-8 kde-config --version' | complete)
+    let version_result = (with-env { LC_ALL: "C.UTF-8" } { ^kde-config --version } | complete)
     if ($version_result.exit_code) != 0 {
         return $exit_code
     }

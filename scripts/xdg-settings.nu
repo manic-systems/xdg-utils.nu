@@ -60,8 +60,8 @@ def --env fix_local_desktop_file [desktop_file: string, mimetype: string] {
 # the shell (via grep) will wait around for kdeinit to exit. If we start a
 # copy here, that copy will be used in xdg-mime and we will avoid waiting.
 def --env xdg_mime_fixup [] {
-    if (not ($env.DE? == null)) and ($env.DE == "kde") and ($env.XDG_MIME_FIXED? | default "" | is-empty) {
-        let result = (^sh -c "ktradertest text/html Application >/dev/null 2>&1" | complete)
+    if ($env.DE? == "kde") and ($env.XDG_MIME_FIXED? | default "" | is-empty) {
+        ^ktradertest text/html Application o+e>| complete | ignore
         $env.XDG_MIME_FIXED = "yes"
     }
 }
@@ -444,7 +444,8 @@ def --env set_browser_xfce [desktop_file: string] {
 
     let temp = (^mktemp $"($helpers_rc).XXXXXX" | complete | get stdout | str trim)
     ^grep -v "^WebBrowser=" $helpers_rc | save --force $temp
-    ^sh -c $"cat ($temp) >> ($helpers_rc) && mv ($temp) ($helpers_rc)" | complete
+    # Atomically swap the filtered temp file in for the live helpers.rc.
+    ^mv $temp $helpers_rc
     print --stderr "Setting browser to xfce4-web-browser.desktop to make setting effective ..."
     set_browser_generic "xfce4-web-browser.desktop"
 }
