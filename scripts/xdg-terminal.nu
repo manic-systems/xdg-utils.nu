@@ -95,6 +95,42 @@ def --env terminal_xfce [command: string] {
     exit_failure_operation_failed
 }
 
+# Split a command line the way a shell would, honoring single quotes, double
+# quotes, and backslash escapes, but without performing variable expansion.
+def shell-words [s: string]: nothing -> list<string> {
+    mut out: list<string> = []
+    mut cur = ""
+    mut in_word = false
+    mut quote = ""
+    mut escape = false
+    for c in ($s | split chars) {
+        if $escape {
+            $cur = $cur + $c
+            $in_word = true
+            $escape = false
+            continue
+        }
+        if $quote == "'" {
+            if $c == "'" { $quote = "" } else { $cur = $cur + $c }
+            continue
+        }
+        if $quote == '"' {
+            if $c == '"' { $quote = "" } else if $c == "\\" { $escape = true } else { $cur = $cur + $c }
+            continue
+        }
+        if $c == "\\" { $escape = true; $in_word = true; continue }
+        if $c == "'" or $c == '"' { $quote = $c; $in_word = true; continue }
+        if $c == " " or $c == (char tab) {
+            if $in_word { $out = ($out | append $cur); $cur = ""; $in_word = false }
+            continue
+        }
+        $cur = $cur + $c
+        $in_word = true
+    }
+    if $in_word { $out = ($out | append $cur) }
+    $out
+}
+
 # Generic terminal
 def --env terminal_generic [command: string] {
     # if $TERM is a known non-command, use hard-coded fallbacks
@@ -108,7 +144,7 @@ def --env terminal_generic [command: string] {
 
     if not ($terminal_exec | is-empty) and (is-executable $terminal_exec) {
         # screen and urxvt want one argv entry per shell word, not the joined string.
-        let cmd_words = ($command | split row " " | where { ($in | is-not-empty) })
+        let cmd_words = (shell-words $command)
         let result = if ($command | is-empty) {
             ^$terminal_exec | complete
         } else if $term == "screen" {
