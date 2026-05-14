@@ -7,7 +7,6 @@
   gawk,
   glib,
   gnugrep,
-  xdg-user-dirs,
   shared-mime-info,
   xprop,
   xset,
@@ -18,7 +17,6 @@
     glib.bin
     gnugrep
     nushell
-    xdg-user-dirs
     shared-mime-info
     xprop
     xset

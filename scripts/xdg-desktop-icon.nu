@@ -76,10 +76,7 @@ def --wrapped main [...args] {
         "other"
     }
 
-    mut desktop_dir = ($env.HOME | path join "Desktop")
-    if (which xdg-user-dir | is-not-empty) {
-        $desktop_dir = (^xdg-user-dir DESKTOP | complete | get stdout | str trim)
-    }
+    mut desktop_dir = (xdg_user_dir "DESKTOP" ($env.HOME | path join "Desktop"))
     let kde_ver = ($env.KDE_SESSION_VERSION? | default "")
     mut desktop_dir_kde = if not ($kde_ver | is-empty) {
         (^$"kde($kde_ver)-config" --userpath desktop | complete | get stdout | str trim)

@@ -34,6 +34,31 @@ export def handle_standard_options [tool: string, args: list<any>, help_lines: l
     }
 }
 
+# Resolve an XDG user directory (such as DESKTOP, DOWNLOAD, etc.) by parsing
+# `~/.config/user-dirs.dirs` directly. Returns the fallback when the file is
+# missing or the key isn't set.
+export def xdg_user_dir [key: string, fallback: string]: nothing -> string {
+    let cfg = (get_xdg_config_home | path join "user-dirs.dirs")
+    if ($cfg | path type) != "file" { return $fallback }
+    let key_re = '^XDG_' + $key + '_DIR='
+    let line = (
+        open --raw $cfg
+        | lines
+        | where { ($in | str trim) =~ $key_re }
+        | get 0?
+    )
+    if $line == null { return $fallback }
+    let value = (
+        $line
+        | parse --regex ($key_re + '"(?P<v>[^"]*)"')
+        | get v?
+        | get 0?
+        | default ""
+    )
+    if ($value | is-empty) { return $fallback }
+    $value | str replace --regex '^\$HOME' $env.HOME
+}
+
 # Returns the first word of text (handles backslashes but not quote marks)
 export def first_word [text: string] {
     let parts = ($text | split row " " | where {|x| not ($x | is-empty) })
