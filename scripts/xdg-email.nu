@@ -280,7 +280,7 @@ END {
 # xdg-email - command line tool for sending mail using the user's preferred e-mail composer
 # Synopsis: xdg-email [--utf8] [--cc address] [--bcc address] [--subject text] [--body text] [--attach file] [mailto-uri | address(es)]
 # Synopsis: xdg-email { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-email" $args [
         "xdg-email - command line tool for sending mail using the user's preferred e-mail composer"
         ""

@@ -213,7 +213,7 @@ def --env directory_zenity [filename: string] {
 # xdg-file-dialog - command line tool for showing desktop file chooser dialogs
 # Synopsis: xdg-file-dialog { open | open-multiple | save | directory } [options]
 # Synopsis: xdg-file-dialog { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-file-dialog" $args [
         "xdg-file-dialog - command line tool for showing desktop file chooser dialogs"
         ""

@@ -7,7 +7,7 @@ use xdg-utils-common.nu *
 # Synopsis: xdg-desktop-icon install [--novendor] FILE
 # Synopsis: xdg-desktop-icon uninstall FILE
 # Synopsis: xdg-desktop-icon { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-desktop-icon" $args [
         "xdg-desktop-icon - command line tool for (un)installing icons to the desktop"
         ""

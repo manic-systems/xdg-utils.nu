@@ -174,7 +174,7 @@ def --env terminal_enlightenment [command: string] {
 # xdg-terminal - opens the user's preferred terminal emulator application
 # Synopsis: xdg-terminal [command]
 # Synopsis: xdg-terminal { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-terminal" $args [
         "xdg-terminal - opens the user's preferred terminal emulator application"
         ""
