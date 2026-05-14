@@ -3,6 +3,32 @@
 
 use xdg-utils-common.nu *
 
+# Walk /proc looking for an xss-lock invocation bound to this session.
+def xss_lock_running [xdg_sid: string]: nothing -> bool {
+    if ($"/proc" | path type) != "dir" { return false }
+    let candidates = (ls /proc | where {|f| ($f.name | path basename) =~ '^\d+$' })
+    for p in $candidates {
+        let cmdline_path = ($p.name | path join "cmdline")
+        let argv = try {
+            open --raw $cmdline_path
+            | into binary
+            | bytes split 0x[00]
+            | each { decode }
+            | where { $in != "" }
+        } catch { [] }
+        if ($argv | is-empty) { continue }
+        let exe = ($argv | get 0 | path basename)
+        if $exe != "xss-lock" { continue }
+        if ($xdg_sid | is-empty) { return true }
+        for i in 1..<(($argv | length)) {
+            let a = ($argv | get $i)
+            if $a == $"--session=($xdg_sid)" { return true }
+            if $a == "-s" and (($argv | get ($i + 1) | default "") == $xdg_sid) { return true }
+        }
+    }
+    false
+}
+
 # Extract a bool from a gdbus method-call reply like `(true,)` or `(false,)`.
 def parse_gdbus_bool [reply: string]: nothing -> string {
     $reply
@@ -395,12 +421,9 @@ def --wrapped main [...args] {
         $env.DE = "xautolock_screensaver"
     }
     # Consider "xss-lock" a separate DE
-    if (which xss-lock | is-not-empty) and (which ps | is-not-empty) {
+    if (which xss-lock | is-not-empty) {
         let xdg_sid = ($env.XDG_SESSION_ID? | default "")
-        let ps_out = (^ps x -o cmd | complete | get stdout)
-        let xss_lines = ($ps_out | lines | where { $in | str starts-with "xss-lock" })
-        let matches = ($xss_lines | where {|l| ($l | str contains $"-s ($xdg_sid)") or ($l | str contains $"--session=($xdg_sid)") })
-        if not ($matches | is-empty) {
+        if (xss_lock_running $xdg_sid) {
             $env.DE = "xss-lock_screensaver"
         }
     }
