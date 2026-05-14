@@ -50,6 +50,33 @@ in
       };
 
     nativeBuildInputs = [makeWrapper];
+
+    doInstallCheck = true;
+    installCheckInputs = [nushell];
+    installCheckPhase = ''
+      runHook preInstallCheck
+
+      nu --no-config-file --commands '
+        glob $"($env.out)/bin/.xdg-*-wrapped"
+          | each {|wrapped|
+              let diags = (
+                nu --ide-check 100 $wrapped
+                  | lines
+                  | each {|l| try { $l | from json } catch { null } }
+                  | where {|d| $d != null and $d.type == "diagnostic" }
+              )
+              if not ($diags | is-empty) {
+                print --stderr $"Parse errors in ($wrapped):"
+                $diags | each {|d| print --stderr ($d | to json --raw) }
+                exit 1
+              }
+            }
+          | ignore
+      '
+
+      runHook postInstallCheck
+    '';
+
     installPhase = ''
       runHook preInstall
 
