@@ -402,8 +402,8 @@ export def --env detectDE [] {
 
     # gnome-default-applications-properties is only available in GNOME 2.x
     # but not in GNOME 3.x
-    if not ($env.DE? == null) and ($env.DE == "gnome") {
-        if ((^which gnome-default-applications-properties | complete).exit_code != 0) {
+    if ($env.DE? | default "") == "gnome" {
+        if (which gnome-default-applications-properties | is-empty) {
             $env.DE = "gnome3"
         }
     }

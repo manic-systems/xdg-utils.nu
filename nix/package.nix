@@ -12,7 +12,6 @@
   gnused,
   perlPackages,
   procps,
-  which,
   xdg-user-dirs,
   shared-mime-info,
   xprop,
@@ -30,7 +29,6 @@
     nushell
     perl-with-deps
     procps
-    which
     xdg-user-dirs
     shared-mime-info
     xprop
