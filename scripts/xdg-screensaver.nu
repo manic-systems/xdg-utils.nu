@@ -45,97 +45,6 @@ def do_unlockfile [screensaver_file: string] {
     rm --force $"($screensaver_file).lock"
 }
 
-# Suspend loop for screen savers that need periodic refresh
-def screensaver_suspend_loop [screensaver_file: string, ...cmd_args: string] {
-    let mv_cmd = get_mv_cmd
-    do_lockfile $screensaver_file
-    let tmpfile = (^mktemp | complete | get stdout | str trim)
-    ^awk '
-BEGIN { FS=":" }
-/^[0-9a-f]+:[0-9]+$/ {
-    wid=$1; pid=$2
-    if (system("ps -p " pid " 2>/dev/null | grep xprop > /dev/null") == 0) {
-        print wid ":" pid
-    }
-}
-' $screensaver_file | save --force $tmpfile
-    if $mv_cmd == "mv -T" {
-        ^mv -T $tmpfile $screensaver_file
-    } else {
-        ^mv $tmpfile $screensaver_file
-    }
-    if ($screensaver_file | path type) == "file" {
-        let filesize = (try { ^stat -c%s $screensaver_file | complete | get stdout | str trim | into int } catch { -1 })
-        if $filesize > 0 {
-            do_unlockfile $screensaver_file
-            return
-        }
-    }
-    do_unlockfile $screensaver_file
-    # Detach a poll loop that keeps re-running the keep-alive command while the
-    # marker file exists. We feed both values to the shell as positional args.
-    ^sh -c 'sf="$1"; shift; while [ -f "$sf" ]; do "$@" 2>/dev/null; sleep 50; done &' -- $screensaver_file ...$cmd_args
-}
-
-# DBus process for freedesktop/gnome screensaver suspend (runs in background)
-def screensaver_dbus_process [window_id: string, screensaver_file: string, dbus_service: string, dbus_path: string] {
-    let perl_script = '
-use strict;
-use warnings;
-use Encode qw(decode);
-use IO::File;
-use Net::DBus;
-use X11::Protocol;
-
-my ($window_id, $screensaver_file, $dbus_service, $dbus_path) = @ARGV;
-
-my $x = X11::Protocol->new();
-my $named_window_id = hex($window_id);
-my $window_name;
-while (1) {
-  eval { ($window_name) = $x->GetProperty($named_window_id, $x->atom("WM_NAME"),
-                                   $x->atom("STRING"), 0, 1000, 0); };
-  $window_name = "?" if $@;
-  last if defined($window_name) && $window_name ne "";
-  (undef, $named_window_id) = $x->QueryTree($named_window_id);
-  if (!defined($named_window_id)) {
-    $window_name = "?";
-    last;
-  }
-}
-
-$window_name = decode("utf8", $window_name, Encode::FB_DEFAULT);
-
-my $bus = Net::DBus->session();
-my $sm_svc = $bus->get_service($dbus_service);
-my $sm = $sm_svc->get_object($dbus_path, $dbus_service);
-if ($dbus_service eq "org.gnome.SessionManager") {
-  $sm->Inhibit($window_name, hex($window_id), $window_name, 8);
-} elsif ($dbus_service eq "org.freedesktop.ScreenSaver") {
-  $sm->Inhibit($window_name, $window_name);
-} else {
-  print STDERR "ERROR: internal error, unknown D-Bus service $dbus_service\n";
-  exit 1;
-}
-
-while (1) {
-  sleep(10);
-  my $status = new IO::File($screensaver_file, "r")
-    or exit 0;
-  my $found;
-  while (<$status>) {
-    if (/^$window_id:/) {
-      $found = 1;
-      last;
-    }
-  }
-  exit 0 unless $found;
-}
-'
-    # Script and identifiers come in as positional args, never interpolated.
-    ^sh -c 'perl -e "$1" "$2" "$3" "$4" "$5" </dev/null >/dev/null 2>&1 &' -- $perl_script $window_id $screensaver_file $dbus_service $dbus_path
-}
-
 # Perform action (called from screensaver implementations for DPMS handling)
 def --env perform_action [action: string, screensaver_file: string] {
     if (which xset | is-empty) { return }
@@ -155,35 +64,33 @@ def --env perform_action [action: string, screensaver_file: string] {
     }
 }
 
-# Cleanup on suspend
-def --env cleanup_suspend [window_id: string, screensaver_file: string] {
-    let mv_cmd = get_mv_cmd
+# Register a window-id suspend in the marker file. On the first suspend we
+# also disable the X11 screensaver via xset; resume undoes both.
+def --env do_suspend [window_id: string, screensaver_file: string] {
     do_lockfile $screensaver_file
-    let tmpfile = (^mktemp | complete | get stdout | str trim)
-    let xprop_pid = (^grep $"($window_id):" $screensaver_file | complete | get stdout | str trim | split row ":" | get 1? | default "")
-    ^grep -v $"($window_id):($xprop_pid)" $screensaver_file | save --force $tmpfile
-    if $mv_cmd == "mv -T" { ^mv -T $tmpfile $screensaver_file } else { ^mv $tmpfile $screensaver_file }
-    let filesize = (try { ^stat -c%s $screensaver_file | complete | get stdout | str trim | into int } catch { 1 })
-    if ($screensaver_file | path type) == "file" and $filesize == 0 {
-        rm --force $screensaver_file
-        do_unlockfile $screensaver_file
-        perform_action "resume" $screensaver_file
-    } else {
-        do_unlockfile $screensaver_file
+    let is_first = not ($screensaver_file | path exists)
+    $"($window_id)\n" | save --append $screensaver_file
+    do_unlockfile $screensaver_file
+    if $is_first {
+        screensaver_xserver "suspend" $screensaver_file | ignore
     }
 }
 
-# Resume
+# Remove a window-id from the marker file. If the marker becomes empty,
+# re-enable the X11 screensaver and restore DPMS.
 def --env do_resume [window_id: string, screensaver_file: string] {
+    if not ($screensaver_file | path exists) { return }
     do_lockfile $screensaver_file
-    let xprop_pid = (^grep $"($window_id):" $screensaver_file | complete | get stdout | str trim | split row ":" | get 1? | default "")
-    do_unlockfile $screensaver_file
-    if not ($xprop_pid | is-empty) {
-        if (^ps -p $xprop_pid | complete | get stdout | ^grep -F xprop | complete).exit_code == 0 {
-            ^kill -s TERM $xprop_pid | complete | ignore
-        }
+    let lines = (open --raw $screensaver_file | lines | where { ($in | is-not-empty) and $in != $window_id })
+    if ($lines | is-empty) {
+        rm --force $screensaver_file
+        do_unlockfile $screensaver_file
+        screensaver_xserver "resume" $screensaver_file | ignore
+        perform_action "resume" $screensaver_file
+    } else {
+        ($lines | str join "\n") + "\n" | save --force $screensaver_file
+        do_unlockfile $screensaver_file
     }
-    cleanup_suspend $window_id $screensaver_file
 }
 
 # Check window ID
@@ -203,50 +110,10 @@ def check_window_id [window_id: string] {
     }
 }
 
-# Track window
-def --env track_window [window_id: string, screensaver_file: string] {
-    let xprop = (which xprop | get 0?.path | default "")
-    if ($xprop | is-empty) { return }
-    let mv_cmd = get_mv_cmd
-
-    do_lockfile $screensaver_file
-    let tmpfile = (^mktemp | complete | get stdout | str trim)
-    let track_result = (^awk $"-v target=($window_id)" '
-BEGIN { already_tracked=1; FS=":" }
-{
-    wid=$1; pid=$2
-    if (system("ps -p " pid " 2>/dev/null | grep xprop > /dev/null") == 0) {
-        print wid ":" pid
-        if (wid == target) already_tracked=0
-    }
-}
-END { exit already_tracked }
-' $screensaver_file | save --force $tmpfile; ^mv $tmpfile $screensaver_file | complete)
-
-    if $track_result.exit_code == 0 {
-        do_unlockfile $screensaver_file
-        return
-    }
-
-    # Spawn xprop in the background through sh so we can capture its PID,
-    # passing the values through positional args.
-    let xprop_pid = (^sh -c '"$1" -id "$2" -spy </dev/null >/dev/null 2>&1 & echo $!' -- $xprop $window_id | complete | get stdout | str trim)
-    $"($window_id):($xprop_pid)\n" | save --append $tmpfile
-    if $mv_cmd == "mv -T" { ^mv -T $tmpfile $screensaver_file } else { ^mv $tmpfile $screensaver_file }
-    do_unlockfile $screensaver_file
-    # `wait` only works on the parent shell's children, and ours is already gone,
-    # so poll the PID directly.
-    while (^kill -0 $xprop_pid o+e>| complete | get exit_code) == 0 {
-        sleep 1sec
-    }
-    cleanup_suspend $window_id $screensaver_file
-}
-
-# Freedesktop screensaver — returns exit code int
-def --env screensaver_freedesktop [action: string, window_id: string, screensaver_file: string]: nothing -> int {
+# Freedesktop screensaver — returns exit code int.
+# Suspend/resume are handled in main; only one-shot actions live here.
+def --env screensaver_freedesktop [action: string]: nothing -> int {
     match $action {
-        "suspend" => { screensaver_dbus_process $window_id $screensaver_file "org.freedesktop.ScreenSaver" "/ScreenSaver"; 0 }
-        "resume" => { 0 }
         "activate" => { (^dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.SetActive boolean:true | complete).exit_code }
         "lock" => { (^dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock | complete).exit_code }
         "reset" => { (^dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.SimulateUserActivity | complete).exit_code }
@@ -338,17 +205,10 @@ def --env screensaver_xserver [action: string, screensaver_file: string]: nothin
     }
 }
 
-# GNOME screensaver — returns exit code int
-def --env screensaver_gnome_screensaver [action: string, window_id: string, screensaver_file: string]: nothing -> int {
-    # DBUS interface for gnome-screensaver
-    # https://gitlab.gnome.org/Archive/gnome-screensaver/-/blob/master/doc/dbus-interface.xml
-    # as well as gnome-shell
-    # https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/data/dbus-interfaces/org.gnome.ScreenSaver.xml
-    # Documentation:
-    # https://gnome.pages.gitlab.gnome.org/gnome-session/re04.html
+# GNOME screensaver — returns exit code int.
+# Suspend/resume are handled in main.
+def --env screensaver_gnome_screensaver [action: string]: nothing -> int {
     match $action {
-        "suspend" => { screensaver_dbus_process $window_id $screensaver_file "org.gnome.SessionManager" "/org/gnome/SessionManager"; 0 }
-        "resume" => { 0 }
         "activate" => { (^dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call /org/gnome/ScreenSaver org.gnome.ScreenSaver.SetActive boolean:true | complete).exit_code }
         "lock" => { (^dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock | complete).exit_code }
         "reset" => { (^dbus-send --session --dest=org.gnome.ScreenSaver --type=method_call /org/gnome/ScreenSaver org.gnome.ScreenSaver.SetActive boolean:false | complete).exit_code }
@@ -366,17 +226,14 @@ def --env screensaver_gnome_screensaver [action: string, window_id: string, scre
     }
 }
 
-# MATE screensaver — returns exit code int
-def --env screensaver_mate_screensaver [action: string, window_id: string, screensaver_file: string]: nothing -> int {
-    # DBUS interface for mate-screensaver
-    # This is same as gnome's for now but may change in the future as MATE
-    # does not follow gnome's development necessarily.
+# MATE screensaver — returns exit code int.
+# Suspend nudges the screensaver once; sustained inhibition isn't supported
+# without a long-running daemon.
+def --env screensaver_mate_screensaver [action: string]: nothing -> int {
     match $action {
-        "suspend" => { screensaver_suspend_loop $screensaver_file "dbus-send" "--session" "--dest=org.mate.ScreenSaver" "--type=method_call" "/org/mate/ScreenSaver" "org.mate.ScreenSaver.SimulateUserActivity"; 0 }
-        "resume" => { 0 }
+        "suspend" | "reset" => { (^dbus-send --session --dest=org.mate.ScreenSaver --type=method_call /org/mate/ScreenSaver org.mate.ScreenSaver.SimulateUserActivity | complete).exit_code }
         "activate" => { (^dbus-send --session --dest=org.mate.ScreenSaver --type=method_call /org/mate/ScreenSaver org.mate.ScreenSaver.SetActive boolean:true | complete).exit_code }
         "lock" => { (^mate-screensaver-command --lock | complete).exit_code }
-        "reset" => { (^dbus-send --session --dest=org.mate.ScreenSaver --type=method_call /org/mate/ScreenSaver org.mate.ScreenSaver.SimulateUserActivity | complete).exit_code }
         "status" => {
             let raw = (^dbus-send --session --dest=org.mate.ScreenSaver --type=method_call --print-reply --reply-timeout=2000 /org/mate/ScreenSaver org.mate.ScreenSaver.GetActive | complete)
             let status = ($raw.stdout | ^grep -F "boolean" | complete | get stdout | split row " " | get 4? | default "")
@@ -387,16 +244,12 @@ def --env screensaver_mate_screensaver [action: string, window_id: string, scree
     }
 }
 
-# Cinnamon screensaver — returns exit code int
-def --env screensaver_cinnamon_screensaver [action: string, window_id: string, screensaver_file: string]: nothing -> int {
-    # DBUS interface for cinnamon-screensaver
-    # https://raw.githubusercontent.com/linuxmint/cinnamon-screensaver/master/doc/dbus-interface.html
+# Cinnamon screensaver — returns exit code int. Suspend is one-shot.
+def --env screensaver_cinnamon_screensaver [action: string]: nothing -> int {
     match $action {
-        "suspend" => { screensaver_suspend_loop $screensaver_file "dbus-send" "--session" "--dest=org.cinnamon.ScreenSaver" "--type=method_call" "/org/cinnamon/ScreenSaver" "org.cinnamon.ScreenSaver.SimulateUserActivity"; 0 }
-        "resume" => { 0 }
+        "suspend" | "reset" => { (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.SimulateUserActivity | complete).exit_code }
         "activate" => { (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.SetActive boolean:true | complete).exit_code }
         "lock" => { (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.Lock string:"" | complete).exit_code }
-        "reset" => { (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.SimulateUserActivity | complete).exit_code }
         "status" => {
             let raw = (^dbus-send --session --dest=org.cinnamon.ScreenSaver --type=method_call --print-reply --reply-timeout=2000 /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver.GetActive | complete)
             let status = ($raw.stdout | ^grep -F "boolean" | complete | get stdout | split row " " | get 4? | default "")
@@ -413,14 +266,12 @@ def --env screensaver_cinnamon_screensaver [action: string, window_id: string, s
     }
 }
 
-# XScreenSaver — returns exit code int
+# XScreenSaver — returns exit code int. Suspend is one-shot.
 def --env screensaver_xscreensaver [action: string, screensaver_file: string]: nothing -> int {
     match $action {
-        "suspend" => { screensaver_suspend_loop $screensaver_file "xscreensaver-command" "-deactivate"; 0 }
-        "resume" => { 0 }
+        "suspend" | "reset" => { (^xscreensaver-command -deactivate | complete).exit_code }
         "activate" => { (^xscreensaver-command -activate | complete).exit_code }
         "lock" => { (^xscreensaver-command -lock | complete).exit_code }
-        "reset" => { (^xscreensaver-command -deactivate | complete).exit_code }
         "status" => {
             if ($screensaver_file | path type) == "file" { print "disabled" } else { print "enabled" }
             0
@@ -481,15 +332,6 @@ def --wrapped main [...args] {
     let cmd = ($args | get 0)
     let rest = ($args | skip 1)
 
-    # The suspend branch re-enters here as a detached process to run the xprop tracker
-    if $cmd == "__track-window" {
-        if ($rest | length) < 2 {
-            exit 1
-        }
-        track_window (($rest | get 0) | into string) (($rest | get 1) | into string)
-        exit 0
-    }
-
     match $cmd {
         "suspend" | "resume" => {
             $action = $cmd
@@ -537,8 +379,9 @@ def --wrapped main [...args] {
     if $has_dbus_send and (do $dbus_owner_exists "org.cinnamon.ScreenSaver") {
         $env.DE = "cinnamon"
     }
-    # Consider "xautolock" a separate DE, and probe with `which` rather than `xautolock -enable`,
-    # which would otherwise enable the autolocker as a side effect just by detecting it.
+    # Consider "xautolock" a separate DE
+    # Probe with `which` rather than `xautolock -enable`, which would otherwise
+    # enable the autolocker as a side effect just by detecting it.
     if (which xautolock | is-not-empty) {
         $env.DE = "xautolock_screensaver"
     }
@@ -553,25 +396,43 @@ def --wrapped main [...args] {
         }
     }
 
-    if $action == "resume" {
-        do_resume $window_id $screensaver_file
+    # suspend/resume are DE-agnostic: track which windows have an outstanding
+    # suspend in $screensaver_file and toggle the X11 screensaver on the first
+    # suspend / last resume. Some DEs (KDE3, xautolock, xss-lock) keep their
+    # own implementation; route those through the DE table below as before.
+    let de = ($env.DE? | default "")
+    let de_specific_suspend = $de in ["kde" "xautolock_screensaver" "xss-lock_screensaver"]
+    if ($action == "suspend" or $action == "resume") and not $de_specific_suspend {
+        if $action == "suspend" {
+            do_suspend $window_id $screensaver_file
+            # Save DPMS state so we can restore it on resume.
+            if not ($env.DISPLAY? | default "" | is-empty) and (which xset | is-not-empty) {
+                if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
+                    let tmpfile = (^mktemp | complete | get stdout | str trim)
+                    let mv_cmd = get_mv_cmd
+                    if $mv_cmd == "mv -T" { ^mv -T $tmpfile $"($screensaver_file).dpms" } else { ^mv $tmpfile $"($screensaver_file).dpms" }
+                    ^xset -dpms | complete | ignore
+                }
+            }
+        } else {
+            do_resume $window_id $screensaver_file
+        }
         exit_success
     }
 
-    let de = ($env.DE? | default "")
     let result = match $de {
         "kde" => {
             if not ($env.KDE_SESSION_VERSION? == null) {
-                screensaver_freedesktop $action $window_id $screensaver_file
+                screensaver_freedesktop $action
             } else {
                 screensaver_kde3 $action
             }
         }
-        "freedesktop_screensaver" => { screensaver_freedesktop $action $window_id $screensaver_file }
-        "gnome3" => { screensaver_freedesktop $action $window_id $screensaver_file }
-        "gnome_screensaver" => { screensaver_gnome_screensaver $action $window_id $screensaver_file }
-        "mate_screensaver" => { screensaver_mate_screensaver $action $window_id $screensaver_file }
-        "cinnamon" => { screensaver_cinnamon_screensaver $action $window_id $screensaver_file }
+        "freedesktop_screensaver" => { screensaver_freedesktop $action }
+        "gnome3" => { screensaver_freedesktop $action }
+        "gnome_screensaver" => { screensaver_gnome_screensaver $action }
+        "mate_screensaver" => { screensaver_mate_screensaver $action }
+        "cinnamon" => { screensaver_cinnamon_screensaver $action }
         "xscreensaver" => { screensaver_xscreensaver $action $screensaver_file }
         "xautolock_screensaver" => { xautolock_screensaver $action }
         "xss-lock_screensaver" => {
@@ -588,7 +449,7 @@ def --wrapped main [...args] {
         }
         "budgie" => {
             if ($env.BUDGIE_SESSION_VERSION? | default "" | str starts-with "10.9") {
-                screensaver_gnome_screensaver $action $window_id $screensaver_file
+                screensaver_gnome_screensaver $action
             } else { 1 }
         }
         "generic" | "" => {
@@ -597,22 +458,6 @@ def --wrapped main [...args] {
             } else { 0 }
         }
         _ => { 1 }
-    }
-
-    if $action == "suspend" {
-        # Re-invoke ourselves detached, passing values through sh positional
-        # args so window_id and screensaver_file never enter the shell string
-        ^sh -c 'setsid "$1" __track-window "$2" "$3" </dev/null >/dev/null 2>&1 &' -- (which xdg-screensaver | get 0?.path | default "xdg-screensaver") $window_id $screensaver_file | complete | ignore
-    }
-
-    # Handle DPMS on suspend
-    if not ($env.DISPLAY? | default "" | is-empty) and $action == "suspend" and (which xset | is-not-empty) {
-        if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
-            let tmpfile = (^mktemp | complete | get stdout | str trim)
-            let mv_cmd = get_mv_cmd
-            if $mv_cmd == "mv -T" { ^mv -T $tmpfile $"($screensaver_file).dpms" } else { ^mv $tmpfile $"($screensaver_file).dpms" }
-            ^xset -dpms | complete | ignore
-        }
     }
 
     if $result == 0 {

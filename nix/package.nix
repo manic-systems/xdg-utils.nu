@@ -9,14 +9,12 @@
   glib,
   gnugrep,
   gnused,
-  perlPackages,
   procps,
   xdg-user-dirs,
   shared-mime-info,
   xprop,
   xset,
 }: let
-  perl-with-deps = perlPackages.perl.withPackages (p: [p.NetDBus p.X11Protocol]);
   runtimeDeps = [
     coreutils
     dbus
@@ -25,7 +23,6 @@
     gnugrep
     gnused
     nushell
-    perl-with-deps
     procps
     xdg-user-dirs
     shared-mime-info
