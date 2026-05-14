@@ -127,7 +127,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         match $parm {
             "--noupdate" => { $update = "no" }
@@ -136,10 +136,11 @@ def --wrapped main [...args] {
                     exit_failure_syntax "mode argument missing for --mode"
                 }
                 let val = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
                 match $val {
                     "user" => { $mode = "user" }
                     "system" => { $mode = "system" }
+                    _ => { exit_failure_syntax $"unknown mode '($val)'" }
                 }
             }
             "--theme" => {
@@ -147,14 +148,14 @@ def --wrapped main [...args] {
                     exit_failure_syntax "theme argument missing for --theme"
                 }
                 $theme = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
             }
             "--size" => {
                 if ($args | is-empty) {
                     exit_failure_syntax "size argument missing for --size"
                 }
                 let val = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
                 let is_valid_size = ($val == "scalable") or (try { $val | into int; true } catch { false })
                 if not $is_valid_size {
                     exit_failure_syntax "size argument must be numeric or the word 'scalable'"
@@ -166,9 +167,30 @@ def --wrapped main [...args] {
                     exit_failure_syntax "context argument missing for --context"
                 }
                 $context = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
             }
             "--novendor" => { $vendor = false }
+            _ => {
+                if ($parm | str starts-with "-") {
+                    exit_failure_syntax $"unexpected option '($parm)'"
+                }
+                if $action == "install" {
+                    if ($icon_file | is-empty) {
+                        check_input_file $parm
+                        $icon_file = $parm
+                    } else if ($icon_name | is-empty) {
+                        $icon_name = $parm
+                    } else {
+                        exit_failure_syntax $"unexpected argument '($parm)'"
+                    }
+                } else {
+                    if ($icon_name | is-empty) {
+                        $icon_name = $parm
+                    } else {
+                        exit_failure_syntax $"unexpected argument '($parm)'"
+                    }
+                }
+            }
         }
     }
 

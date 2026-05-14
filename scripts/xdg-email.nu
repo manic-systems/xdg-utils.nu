@@ -226,7 +226,11 @@ def --env open_generic [mailto: string, attach: string] {
         run_thunderbird $client $mailto $attach
     }
 
-    ^xdg-open $mailto | complete
+    let result = (^xdg-open $mailto | complete)
+    if ($result.exit_code) == 0 {
+        exit_success
+    }
+    exit_failure_operation_failed
 }
 
 # URL encode string

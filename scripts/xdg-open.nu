@@ -685,12 +685,13 @@ def --env open_envvar [url: string] {
     for browser in $browsers {
         if ($browser | is-empty) { continue }
 
-        if ($browser | ^grep -q "%s" | complete | get exit_code) == 0 {
-            if (has_single_argument 1) {
-                let cmd = (^printf $browser $url | complete)
-                if ($cmd.exit_code) == 0 {
-                    exit_success
-                }
+        if ($browser | str contains "%s") {
+            # Substitute %s with the URL, then run with sh
+            let formatted = (^printf $browser $url | complete | get stdout)
+            if ($formatted | is-empty) { continue }
+            let result = (^sh -c $formatted | complete)
+            if ($result.exit_code) == 0 {
+                exit_success
             }
         } else {
             let result = (^$browser $url | complete)

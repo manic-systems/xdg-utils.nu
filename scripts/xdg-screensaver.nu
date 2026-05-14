@@ -454,6 +454,15 @@ def --wrapped main [...args] {
     let cmd = ($args | get 0)
     let rest = ($args | skip 1)
 
+    # The suspend branch re-enters here as a detached process to run the xprop tracker
+    if $cmd == "__track-window" {
+        if ($rest | length) < 2 {
+            exit 1
+        }
+        track_window (($rest | get 0) | into string) (($rest | get 1) | into string)
+        exit 0
+    }
+
     match $cmd {
         "suspend" | "resume" => {
             $action = $cmd
@@ -496,8 +505,9 @@ def --wrapped main [...args] {
     if (^dbus-send --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.GetNameOwner string:org.cinnamon.ScreenSaver | complete).exit_code == 0 {
         $env.DE = "cinnamon"
     }
-    # Consider "xautolock" a separate DE
-    if (^xautolock -enable | complete).exit_code == 0 {
+    # Consider "xautolock" a separate DE, and probe with `which` so we don't
+    # actually enable the autolocker as a side effect of detecting it
+    if (which xautolock | is-not-empty) {
         $env.DE = "xautolock_screensaver"
     }
     # Consider "xss-lock" a separate DE
@@ -555,7 +565,9 @@ def --wrapped main [...args] {
     }
 
     if $action == "suspend" {
-        ^sh -c $"nu -c 'use xdg-utils-common.nu *; source xdg-screensaver.nu; track_window \"($window_id)\" \"($screensaver_file)\"' &" | complete | ignore
+        # Re-invoke ourselves detached, passing values through sh positional
+        # args so window_id and screensaver_file never enter the shell string
+        ^sh -c 'setsid "$1" __track-window "$2" "$3" </dev/null >/dev/null 2>&1 &' -- (which xdg-screensaver | get 0?.path | default "xdg-screensaver") $window_id $screensaver_file | complete | ignore
     }
 
     # Handle DPMS on suspend

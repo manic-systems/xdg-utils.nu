@@ -128,7 +128,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         match $parm {
             "-u" => {
@@ -136,14 +136,18 @@ def --wrapped main [...args] {
                     exit_failure_syntax "user argument missing for -u"
                 }
                 $user = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
             }
-            "-c" => {
-                if ($args | is-empty) {
-                    exit_failure_syntax "command argument missing for -c"
+            "-c" => { }
+            _ => {
+                if ($parm | str starts-with "-") {
+                    exit_failure_syntax $"unexpected option '($parm)'"
                 }
-                $cmd = ($args | get 0)
-                let args = ($args | skip 1)
+                if ($cmd | is-empty) {
+                    $cmd = $parm
+                } else {
+                    $cmd = $"($cmd) ($parm)"
+                }
             }
         }
     }

@@ -157,7 +157,7 @@ BEGIN { RS="<" }
 
     if $action == "install" {
         for desktop_file in $desktop_files {
-            let basefile = ($desktop_file | path parse | get stem)
+            let basefile = ($desktop_file | path basename)
             let already_listed = (^grep $"^($basefile)$" $tmpfile | complete).exit_code == 0
             if not $already_listed {
                 $"($basefile)\n" | save --append $tmpfile
@@ -169,7 +169,7 @@ BEGIN { RS="<" }
     if $action == "uninstall" {
         ^touch $tmpfile
         for desktop_file in $desktop_files {
-            $"($desktop_file | path parse | get stem)\n" | save --append $tmpfile
+            $"($desktop_file | path basename)\n" | save --append $tmpfile
         }
         for desktop_file in $orig_desktop_files {
             let is_removed = (^grep $"^($desktop_file)$" $tmpfile | complete).exit_code == 0
@@ -191,8 +191,8 @@ BEGIN { RS="<" }
         $"($menu_header)\n" | save --force $tmpfile
 
         for desktop_file in $directory_files {
-            let basefile = ($desktop_file | path parse | get stem)
-            let basefilename = ($basefile | split row "." | get 0)
+            let basefile = ($desktop_file | path basename)
+            let basefilename = ($basefile | path parse | get stem)
             $"<Menu>\n" | save --append $tmpfile
             $"    <Name>($basefilename)</Name>\n" | save --append $tmpfile
             $"    <Directory>($basefile)</Directory>\n" | save --append $tmpfile
@@ -286,7 +286,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         match $parm {
             "--noupdate" => { $update = "no" }
@@ -295,13 +295,27 @@ def --wrapped main [...args] {
                     exit_failure_syntax "mode argument missing for --mode"
                 }
                 let val = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
                 match $val {
                     "user" => { $mode = "user" }
                     "system" => { $mode = "system" }
+                    _ => { exit_failure_syntax $"unknown mode '($val)'" }
                 }
             }
             "--novendor" => { $vendor = false }
+            _ => {
+                if ($parm | str starts-with "-") {
+                    exit_failure_syntax $"unexpected option '($parm)'"
+                }
+                if $action == "install" {
+                    check_input_file $parm
+                }
+                if ($parm | str ends-with ".directory") {
+                    $directory_files = ($directory_files | append $parm)
+                } else {
+                    $desktop_files = ($desktop_files | append $parm)
+                }
+            }
         }
     }
 
@@ -344,7 +358,7 @@ def --wrapped main [...args] {
         if $vendor and $action == "install" {
             check_vendor_prefix $desktop_file
         }
-        let basefilename = ($desktop_file | path parse | get stem | split row "." | get 0)
+        let basefilename = ($desktop_file | path parse | get stem)
         if ($menu_name | is-empty) {
             $menu_name = $basefilename
         } else {
@@ -387,7 +401,7 @@ def --wrapped main [...args] {
     }
 
     for desktop_file in $directory_files {
-        let basefile = ($desktop_file | path parse | get stem)
+        let basefile = ($desktop_file | path basename)
         DEBUG 1 $"($action) ($desktop_file) in ($xdg_dir)"
 
         if $action == "install" {
@@ -438,7 +452,7 @@ def --wrapped main [...args] {
         if $vendor and $action == "install" {
             check_vendor_prefix $desktop_file
         }
-        let basefile = ($desktop_file | path parse | get stem)
+        let basefile = ($desktop_file | path basename)
         DEBUG 1 $"($action) ($desktop_file) in ($xdg_dir2)"
 
         if $action == "install" {

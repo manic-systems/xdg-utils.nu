@@ -3,13 +3,16 @@
 export const XDG_UTILS_VERSION = "1.2.1"
 
 # Debug output based on XDG_UTILS_DEBUG_LEVEL
-export def --env DEBUG [level: int ...args] {
-    if not ($env.XDG_UTILS_DEBUG_LEVEL? == null) and ($env.XDG_UTILS_DEBUG_LEVEL >= $level) {
+export def DEBUG [level: int ...args] {
+    let raw = ($env.XDG_UTILS_DEBUG_LEVEL? | default "")
+    if ($raw | is-empty) { return }
+    let current = (try { $raw | into int } catch { 0 })
+    if $current >= $level {
         print --stderr ($args | str join " ")
     }
 }
 
-export def --env handle_standard_options [tool: string, args: list<string>, help_lines: list<string>] {
+export def handle_standard_options [tool: string, args: list<any>, help_lines: list<string>] {
     if (($args | length) != 1) {
         return
     }
@@ -123,7 +126,8 @@ export def --env desktop_file_to_binary [desktop_file: string] {
         )
     )
 
-    let desktop = ($desktop_file | path parse | get stem)
+    # Normalize to the full <name>.desktop filename used on disk
+    let desktop = if ($desktop_file | str ends-with ".desktop") { $desktop_file } else { $"($desktop_file).desktop" }
     let search_dirs = ($search | split row ":")
 
     for dir in $search_dirs {
@@ -140,8 +144,9 @@ export def --env desktop_file_to_binary [desktop_file: string] {
 
         # Check if desktop file contains vendor prefix (contains -)
         if ($desktop | str contains "-") {
-            let vendor = ($desktop | split row "-" | get 0)
-            let app = ($desktop | split row "-" | get 1)
+            let stem = ($desktop | str substring 0..(($desktop | str length) - (".desktop" | str length)))
+            let vendor = ($stem | split row "-" | get 0)
+            let app = $"($stem | split row "-" | skip 1 | str join "-").desktop"
 
             if (($dir | path join "applications" $vendor $app | path type) == "file") {
                 $file_path = ($dir | path join "applications" $vendor $app)
@@ -162,7 +167,7 @@ export def --env desktop_file_to_binary [desktop_file: string] {
             ] {
                 DEBUG 4 $"Does file exist? '($indir)/($desktop)'"
                 let test_path = ($indir | path join $desktop)
-                if (($test_path | path type) == "file" and ($test_path | path parse | get extension) == "desktop") {
+                if (($test_path | path type) == "file") {
                     $file_path = $test_path
                     $found_file_path = true
                     break
@@ -303,7 +308,9 @@ export def --env check_output_file [path: string] {
 # Set up output redirection based on debug level
 # If debug level is < 1, be silent; otherwise output to stderr
 export def --env setup_xdg_redirect [] {
-    if ($env.XDG_UTILS_DEBUG_LEVEL? == null) or ($env.XDG_UTILS_DEBUG_LEVEL < 1) {
+    let raw = ($env.XDG_UTILS_DEBUG_LEVEL? | default "")
+    let level = if ($raw | is-empty) { 0 } else { try { $raw | into int } catch { 0 } }
+    if $level < 1 {
         $env.XDG_UTILS_REDIRECT_OUTPUT = "/dev/null"
     } else {
         $env.XDG_UTILS_REDIRECT_OUTPUT = "stderr"
@@ -382,11 +389,11 @@ export def --env detectDE [] {
     if ($env.DE? == null) {
         let uname_result = (^uname | complete)
         if ($uname_result.exit_code) == 0 {
-            let os = ($uname_result.stdout)
+            let os = ($uname_result.stdout | str trim)
             if ($os | str starts-with "CYGWIN") { $env.DE = "cygwin" }
             if ($env.DE? == null) and ($os == "Darwin") { $env.DE = "darwin" }
             if ($env.DE? == null) and ($os == "Linux") {
-                if ((^grep -q "microsoft" $"/proc/version" | complete).exit_code == 0) and ((^which explorer.exe | complete).exit_code == 0) {
+                if (("/proc/version" | path type) == "file") and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
                     $env.DE = "wsl"
                 }
             }

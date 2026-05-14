@@ -42,7 +42,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         match $parm {
             "--novendor" => { $vendor = false }
@@ -117,7 +117,7 @@ def --wrapped main [...args] {
         }
     }
 
-    let basefile = ($desktop_file | path parse | get stem)
+    let basefile = ($desktop_file | path basename)
 
     DEBUG 1 $"($action) ($desktop_file) in ($desktop_dir)"
 

@@ -190,7 +190,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         if ($parm | str starts-with "-") {
             exit_failure_syntax $"unexpected option '($parm)'"
