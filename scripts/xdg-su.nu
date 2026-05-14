@@ -104,8 +104,20 @@ def --env su_xfce [user: string, cmd: string] {
     }
 }
 
-# Main entry point
+# xdg-su - command line tool for running a command as another user
+# Synopsis: xdg-su [-u username] command [arguments]
+# Synopsis: xdg-su { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-su" $args [
+        "xdg-su - command line tool for running a command as another user"
+        ""
+        "Synopsis"
+        ""
+        "xdg-su [-u username] command [arguments]"
+        ""
+        "xdg-su { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

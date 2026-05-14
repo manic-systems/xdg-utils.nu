@@ -776,8 +776,26 @@ def --env defapp_lxqt [mimetype: string] {
     exit_failure_operation_impossible $"no method available for querying the default application for MIME type of '($mimetype)'"
 }
 
-# Main entry point
+# xdg-mime - command line tool for querying information about file type handling and adding descriptions for new file types
+# Synopsis: xdg-mime query { filetype FILE | default mimetype }
+# Synopsis: xdg-mime default application mimetype(s)
+# Synopsis: xdg-mime install [--mode mode] [--novendor] mimetypes-file
+# Synopsis: xdg-mime uninstall [--mode mode] mimetypes-file
+# Synopsis: xdg-mime { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-mime" $args [
+        "xdg-mime - command line tool for querying information about file type handling and adding descriptions for new file types"
+        ""
+        "Synopsis"
+        ""
+        "xdg-mime query { filetype FILE | default mimetype }"
+        "xdg-mime default application mimetype(s)"
+        "xdg-mime install [--mode mode] [--novendor] mimetypes-file"
+        "xdg-mime uninstall [--mode mode] mimetypes-file"
+        ""
+        "xdg-mime { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

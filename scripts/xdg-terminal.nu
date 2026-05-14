@@ -171,8 +171,20 @@ def --env terminal_enlightenment [command: string] {
     terminal_generic $command
 }
 
-# Main entry point
+# xdg-terminal - opens the user's preferred terminal emulator application
+# Synopsis: xdg-terminal [command]
+# Synopsis: xdg-terminal { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-terminal" $args [
+        "xdg-terminal - opens the user's preferred terminal emulator application"
+        ""
+        "Synopsis"
+        ""
+        "xdg-terminal [command]"
+        ""
+        "xdg-terminal { --help | --manual | --version }"
+    ]
+
     mut command = ""
 
     mut args = $args

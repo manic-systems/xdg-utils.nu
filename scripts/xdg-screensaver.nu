@@ -426,8 +426,24 @@ def --env xautolock_screensaver [action: string]: nothing -> int {
     }
 }
 
-# Main entry point
+# xdg-screensaver - command line tool for controlling the screensaver
+# Synopsis: xdg-screensaver suspend WindowID
+# Synopsis: xdg-screensaver resume WindowID
+# Synopsis: xdg-screensaver { activate | lock | reset | status }
+# Synopsis: xdg-screensaver { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-screensaver" $args [
+        "xdg-screensaver - command line tool for controlling the screensaver"
+        ""
+        "Synopsis"
+        ""
+        "xdg-screensaver suspend WindowID"
+        "xdg-screensaver resume WindowID"
+        "xdg-screensaver { activate | lock | reset | status }"
+        ""
+        "xdg-screensaver { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

@@ -27,8 +27,20 @@ def --env copy_gnome [source: string, dest: string] {
     exit_failure_operation_failed
 }
 
-# Main entry point
+# xdg-copy - command line tool for transferring files using desktop integration backends
+# Synopsis: xdg-copy [source] [destination]
+# Synopsis: xdg-copy { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-copy" $args [
+        "xdg-copy - command line tool for transferring files using desktop integration backends"
+        ""
+        "Synopsis"
+        ""
+        "xdg-copy [--help] source [destination]"
+        ""
+        "xdg-copy { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

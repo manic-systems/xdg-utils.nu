@@ -245,8 +245,24 @@ BEGIN { RS="<" }
     }
 }
 
-# Main entry point
+# xdg-desktop-menu - command line tool for (un)installing desktop menu items
+# Synopsis: xdg-desktop-menu install [--noupdate] [--novendor] [--mode mode] directory-file(s) desktop-file(s)
+# Synopsis: xdg-desktop-menu uninstall [--noupdate] [--mode mode] directory-file(s) desktop-file(s)
+# Synopsis: xdg-desktop-menu forceupdate [--mode mode]
+# Synopsis: xdg-desktop-menu { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-desktop-menu" $args [
+        "xdg-desktop-menu - command line tool for (un)installing desktop menu items"
+        ""
+        "Synopsis"
+        ""
+        "xdg-desktop-menu install [--noupdate] [--novendor] [--mode mode] directory-file(s) desktop-file(s)"
+        "xdg-desktop-menu uninstall [--noupdate] [--mode mode] directory-file(s) desktop-file(s)"
+        "xdg-desktop-menu forceupdate [--mode mode]"
+        ""
+        "xdg-desktop-menu { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

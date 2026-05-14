@@ -1,9 +1,33 @@
 # Common utility functions for xdg-utils scripts in Nushell
 
+export const XDG_UTILS_VERSION = "1.2.1"
+
 # Debug output based on XDG_UTILS_DEBUG_LEVEL
 export def --env DEBUG [level: int ...args] {
     if not ($env.XDG_UTILS_DEBUG_LEVEL? == null) and ($env.XDG_UTILS_DEBUG_LEVEL >= $level) {
         print --stderr ($args | str join " ")
+    }
+}
+
+export def --env handle_standard_options [tool: string, args: list<string>, help_lines: list<string>] {
+    if (($args | length) != 1) {
+        return
+    }
+
+    let arg = ($args | get 0)
+    if ($arg == "--help") or ($arg == "-h") {
+        print ($help_lines | str join (char nl))
+        exit 0
+    }
+
+    if $arg == "--manual" {
+        print $"Use 'man ($tool)' for additional info."
+        exit 0
+    }
+
+    if $arg == "--version" {
+        print $"($tool) ($XDG_UTILS_VERSION)"
+        exit 0
     }
 }
 

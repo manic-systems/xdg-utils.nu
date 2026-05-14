@@ -3,7 +3,22 @@
 
 use xdg-utils-common.nu *
 
+# xdg-desktop-icon - command line tool for (un)installing icons to the desktop
+# Synopsis: xdg-desktop-icon install [--novendor] FILE
+# Synopsis: xdg-desktop-icon uninstall FILE
+# Synopsis: xdg-desktop-icon { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-desktop-icon" $args [
+        "xdg-desktop-icon - command line tool for (un)installing icons to the desktop"
+        ""
+        "Synopsis"
+        ""
+        "xdg-desktop-icon install [--novendor] FILE"
+        "xdg-desktop-icon uninstall FILE"
+        ""
+        "xdg-desktop-icon { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }
