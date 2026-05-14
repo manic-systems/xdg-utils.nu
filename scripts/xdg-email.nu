@@ -420,7 +420,7 @@ def --wrapped main [...args] {
         $env.DE = "envvar"
     }
 
-    match $env.DE {
+    match ($env.DE? | default "") {
         "envvar" => {
             if not ($attach | is-empty) {
                 exit_failure_operation_impossible "Unable to use --attach with the MAILER environment variable"

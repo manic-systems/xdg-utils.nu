@@ -794,7 +794,7 @@ def --env open_lxqt [url: string] {
 
 # Dispatch to correct opener based on DE
 def --env open_one_argument [url: string] {
-    match $env.DE {
+    match ($env.DE? | default "") {
         "kde" => { open_kde $url }
         "deepin" => { open_deepin $url }
         "gnome3" => { open_gnome3 $url }

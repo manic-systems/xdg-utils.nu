@@ -74,7 +74,7 @@ def --wrapped main [...args] {
 
     detectDE
 
-    match $env.DE {
+    match ($env.DE? | default "") {
         "kde" => { copy_kde $source $dest }
         "gnome" => { copy_gnome $source $dest }
         "cinnamon" => { copy_gnome $source $dest }

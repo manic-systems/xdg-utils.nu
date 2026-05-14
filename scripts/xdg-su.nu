@@ -158,13 +158,13 @@ def --wrapped main [...args] {
     }
 
     detectDE
-    if ($env.DE | is-empty) {
+    if ($env.DE? | default "" | is-empty) {
         if (which xterm | is-not-empty) {
             $env.DE = "generic"
         }
     }
 
-    match $env.DE {
+    match ($env.DE? | default "") {
         "kde" => { su_kde $user $cmd }
         "gnome" => { su_gnome $user $cmd }
         "cinnamon" => { su_gnome $user $cmd }

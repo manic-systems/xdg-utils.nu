@@ -19,7 +19,7 @@ def --env update_kde_cache [] {
 def --env update_mime_database [mode: string] {
     if $mode == "user" and (has_display) {
         detectDE
-        if $env.DE == "kde" {
+        if ($env.DE? | default "") == "kde" {
             update_kde_cache
         }
     }
@@ -961,7 +961,7 @@ def --wrapped main [...args] {
             }
         }
 
-        match $env.DE {
+        match ($env.DE? | default "") {
             "kde" => { info_kde $filename }
             "gnome" | "cinnamon" | "lxde" | "mate" | "xfce" | "budgie" => { info_gnome $filename }
             "lxqt" => { info_lxqt $filename }
@@ -977,7 +977,7 @@ def --wrapped main [...args] {
             defapp_kde $mimetype
         }
 
-        match $env.DE {
+        match ($env.DE? | default "") {
             "lxqt" => { defapp_lxqt $mimetype }
             _ => {}
         }
