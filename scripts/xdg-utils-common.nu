@@ -126,19 +126,18 @@ export def --env binary_to_desktop_file [command_or_path: string] {
             if not (($file_path | path type) == "file" and ($file_path | path parse | get extension) == "desktop") { continue }
             if not (is-readable $file_path) { continue }
 
+            let file_lines = (open --raw $file_path | lines)
+
             # Check if the Exec line contains the base binary name
-            let grep_result = (^grep -c $"Exec.*($base)" $file_path | complete)
-            let exec_match = ($grep_result.exit_code) == 0
-            if not $exec_match { continue }
+            if not ($file_lines | any {|l| $l =~ $"Exec.*($base)" }) { continue }
 
             # Skip hidden desktop files
-            let hidden_check = (^grep -E "^(NoDisplay|Hidden)=true" $file_path | complete)
-            if ($hidden_check.exit_code) == 0 { continue }
+            if ($file_lines | any {|l| $l =~ '^(NoDisplay|Hidden)=true' }) { continue }
 
             # Get the command from Exec line
-            let exec_line_result = (^grep -E '^Exec(\[[^]=]*])?=' $file_path | complete)
-            if ($exec_line_result.exit_code) != 0 { continue }
-            let exec_line = ($exec_line_result.stdout | lines | get 0 | split row "=" | skip 1 | str join "=" | split row " " | where { not ($in | is-empty) } | get 0 | str trim)
+            let exec_lines = ($file_lines | where {|l| $l =~ '^Exec(\[[^]=]*\])?=' })
+            if ($exec_lines | is-empty) { continue }
+            let exec_line = ($exec_lines | get 0 | split row "=" | skip 1 | str join "=" | split row " " | where { not ($in | is-empty) } | get 0 | str trim)
             let which_exec = (which $exec_line)
             if ($which_exec | is-empty) { continue }
             let command = ($which_exec | get 0.path)

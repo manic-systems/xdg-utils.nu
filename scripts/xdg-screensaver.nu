@@ -40,7 +40,7 @@ def parse_gdbus_bool [reply: string]: nothing -> string {
 
 # Detect whether mv supports -T (GNU mv)
 def get_mv_cmd []: nothing -> string {
-    if (^mv --help | complete | get stdout | ^grep -qF -- "-T" | complete).exit_code == 0 {
+    if (^mv --help | complete | get stdout | str contains "-T") {
         "mv -T"
     } else {
         "mv"

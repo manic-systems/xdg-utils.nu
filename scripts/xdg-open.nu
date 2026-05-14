@@ -8,8 +8,7 @@ use xdg-utils-common.nu *
 
 # Check if string is a URL scheme
 def has_url_scheme [text: string] {
-    let pattern = "^[[:alpha:]][[:alpha:][:digit:]+.-]*:"
-    ($text | ^grep -Eq $pattern | complete).exit_code == 0
+    $text =~ '^[[:alpha:]][[:alpha:][:digit:]+.\-]*:'
 }
 
 # Check if argument is a file:// URL or path

@@ -6,7 +6,6 @@
   coreutils,
   gawk,
   glib,
-  gnugrep,
   shared-mime-info,
   xprop,
   xset,
@@ -15,7 +14,6 @@
     coreutils
     gawk
     glib.bin
-    gnugrep
     nushell
     shared-mime-info
     xprop

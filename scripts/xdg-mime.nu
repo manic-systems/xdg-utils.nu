@@ -70,7 +70,16 @@ def --env info_gnome [filename: string] {
         ""
     }
 
-    let mimetype = ($result | ^grep "standard::content-type" | complete | get stdout | split row " " | get 3? | default "")
+    let mimetype = (
+        $result
+        | lines
+        | where { $in | str contains "standard::content-type" }
+        | get 0?
+        | default ""
+        | split row " "
+        | get 3?
+        | default ""
+    )
     if not ($mimetype | is-empty) {
         print $mimetype
         exit_success
@@ -614,8 +623,8 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
         for x in $mimetypes {
             let desktop_file = ($kde_dir | path join $"($x).desktop")
             if ($desktop_file | path type) == "file" {
-                let check_result = (^grep "^# Installed by xdg-mime" $desktop_file | complete)
-                if ($check_result.exit_code) == 0 {
+                let installed_by_us = (open --raw $desktop_file | lines | any {|l| $l | str starts-with "# Installed by xdg-mime" })
+                if $installed_by_us {
                     DEBUG 1 $"Removing ($desktop_file) (KDE 3.x support)"
                     rm $desktop_file
                 }
@@ -628,7 +637,12 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
 
 # Search for desktop files that support a MIME type
 def --env search_desktop_file [mimetype: string, dir: string] {
-    let results = (ls $dir | where {|f| ($f.name | path type) == "file" and ($f.name | path parse | get extension) == "desktop" and ((^grep -l $"($mimetype);" $f.name | complete).exit_code == 0) })
+    let needle = $"($mimetype);"
+    let results = (ls $dir | where {|f|
+        ($f.name | path type) == "file"
+        and ($f.name | path parse | get extension) == "desktop"
+        and (open --raw $f.name | lines | any {|l| $l | str contains $needle })
+    })
     for f in $results {
         print $f.name
     }
@@ -728,9 +742,15 @@ def --env defapp_generic [mimetype: string] {
             let defaults_list = ($base_dir | path join "applications" $prefix "defaults.list")
             let mimeinfo_cache = ($base_dir | path join "applications" $prefix "mimeinfo.cache")
             if (($defaults_list | path type) == "file" or ($mimeinfo_cache | path type) == "file") {
-                let result = (^grep $"($mimetype)=" $"($defaults_list)" $"($mimeinfo_cache)" | complete | get stdout)
-                if not ($result | is-empty) {
-                    let trader_result = ($result | split row "=" | get 1? | default "" | split row ";" | get 0? | default "")
+                let needle = $"($mimetype)="
+                let candidate_files = ([$defaults_list, $mimeinfo_cache] | where { ($in | path type) == "file" })
+                let matched = ($candidate_files
+                    | each {|f| open --raw $f | lines | where {|l| $l | str contains $needle } }
+                    | flatten
+                    | get 0?
+                    | default "")
+                if not ($matched | is-empty) {
+                    let trader_result = ($matched | split row "=" | get 1? | default "" | split row ";" | get 0? | default "")
                     if not ($trader_result | is-empty) {
                         print $trader_result
                         exit_success
@@ -758,7 +778,7 @@ def --env defapp_kde [mimetype: string] {
         DEBUG 1 $"Running KDE trader query '($mimetype)'"
         let result = (^$trader --mimetype $mimetype --servicetype Application | complete | get stdout)
         if not ($result | is-empty) {
-            let desktop_line = ($result | ^grep -E '^DesktopEntryPath : |\.desktop$' | complete | get stdout | lines | get 0? | default "")
+            let desktop_line = ($result | lines | where {|l| $l =~ '^DesktopEntryPath : |\.desktop$' } | get 0? | default "")
             let desktop = ($desktop_line | str replace --regex "^DesktopEntryPath : '(.*\\.desktop)'$" "$1" | str trim)
             if not ($desktop | is-empty) {
                 print ($desktop | path parse | get stem)

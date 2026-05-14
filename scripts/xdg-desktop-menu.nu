@@ -46,10 +46,14 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
         mut default_app = ""
         for x in ($xdg_default_dirs | split row ":") {
             DEBUG 2 $"Checking ($x)/applications/defaults.list"
-            let grep_out = (^grep $"($MIME)=" ($x | path join "applications" "defaults.list") | complete)
-            let entry = if $grep_out.exit_code == 0 {
-                $grep_out.stdout | str trim | split row "=" | skip 1 | str join "="
+            let defaults_path = ($x | path join "applications" "defaults.list")
+            let needle = $"($MIME)="
+            let match = if ($defaults_path | path type) == "file" {
+                open --raw $defaults_path | lines | where {|l| $l | str contains $needle } | get 0? | default ""
             } else { "" }
+            let entry = if ($match | is-empty) { "" } else {
+                $match | str trim | split row "=" | skip 1 | str join "="
+            }
             if not ($entry | is-empty) {
                 DEBUG 2 $"Found default apps for ($MIME): ($entry)"
                 $default_app = $"($entry);"
@@ -63,8 +67,9 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
             if not ($default_file | is-empty) and ($default_file | path type) == "file" {
                 DEBUG 1 $"Updating ($default_file)"
                 let new_file = $"($default_file).new"
-                ^grep -v $"($MIME)=" $default_file | save --force $new_file
-                let has_header = (^grep "[Default Applications]" $new_file | complete).exit_code == 0
+                let needle = $"($MIME)="
+                open --raw $default_file | lines | where {|l| not ($l | str contains $needle) } | str join "\n" | save --force $new_file
+                let has_header = (open --raw $new_file | str contains "[Default Applications]")
                 if not $has_header {
                     "[Default Applications]\n" | save --append $new_file
                 }
@@ -158,7 +163,7 @@ BEGIN { RS="<" }
     if $action == "install" {
         for desktop_file in $desktop_files {
             let basefile = ($desktop_file | path basename)
-            let already_listed = (^grep $"^($basefile)$" $tmpfile | complete).exit_code == 0
+            let already_listed = (open --raw $tmpfile | lines | any {|l| $l == $basefile })
             if not $already_listed {
                 $"($basefile)\n" | save --append $tmpfile
             }
@@ -171,8 +176,9 @@ BEGIN { RS="<" }
         for desktop_file in $desktop_files {
             $"($desktop_file | path basename)\n" | save --append $tmpfile
         }
+        let removed_set = (open --raw $tmpfile | lines)
         for desktop_file in $orig_desktop_files {
-            let is_removed = (^grep $"^($desktop_file)$" $tmpfile | complete).exit_code == 0
+            let is_removed = ($removed_set | any {|l| $l == $desktop_file })
             if not $is_removed {
                 $new_desktop_files = ($new_desktop_files | append $desktop_file)
             }
@@ -221,7 +227,7 @@ BEGIN { RS="<" }
     if $action == "uninstall" {
         let tmpfile = (^mktemp | complete | get stdout | str trim)
         for mf in (glob ($xdg_dir | path join "*")) {
-            let referenced = (^grep "xdg-utils" $mf | complete).exit_code == 0
+            let referenced = (open --raw $mf | str contains "xdg-utils")
             if $referenced {
                 ^awk '
 BEGIN { RS="<" }
@@ -232,9 +238,10 @@ BEGIN { RS="<" }
 }' $mf | save --append $tmpfile
             }
         }
+        let referenced_set = (open --raw $tmpfile | lines)
         mut remaining_directory_files: list<string> = []
         for desktop_file in $directory_files {
-            let still_referenced = (^grep $"^($desktop_file)$" $tmpfile | complete).exit_code == 0
+            let still_referenced = ($referenced_set | any {|l| $l == $desktop_file })
             if not $still_referenced {
                 # No longer in use, safe to delete
                 $remaining_directory_files = ($remaining_directory_files | append $desktop_file)
