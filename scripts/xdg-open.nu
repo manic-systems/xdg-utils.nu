@@ -212,392 +212,241 @@ def --env open_gdbus [url: string] {
 }
 
 
+# Resolve Desktop Entry value escapes (\s \n \t \r \\).
+def unescape_desktop_value [v: string]: nothing -> string {
+    let chars = ($v | split chars)
+    let n = ($chars | length)
+    mut out = ""
+    mut i = 0
+    while $i < $n {
+        let c = ($chars | get $i)
+        if $c == "\\" and ($i + 1) < $n {
+            let nx = ($chars | get ($i + 1))
+            $out = $out ++ (match $nx {
+                "s" => " "
+                "n" => "\n"
+                "t" => "\t"
+                "r" => "\r"
+                "\\" => "\\"
+                _ => ""
+            })
+            $i = $i + 2
+        } else {
+            $out = $out ++ $c
+            $i = $i + 1
+        }
+    }
+    $out
+}
+
+# Split an Exec= value into argv, respecting "double quotes" with backslash
+# escapes. Mirrors the Desktop Entry specification.
+def split_exec_value [v: string]: nothing -> list<string> {
+    mut args: list<string> = []
+    mut current = ""
+    mut in_quote = false
+    mut next_literal = false
+    for c in ($v | split chars) {
+        if $next_literal {
+            $current = $current ++ $c
+            $next_literal = false
+            continue
+        }
+        if $in_quote {
+            if $c == '"' {
+                $args = ($args | append $current)
+                $current = ""
+                $in_quote = false
+            } else if $c == "\\" {
+                $next_literal = true
+            } else {
+                $current = $current ++ $c
+            }
+        } else {
+            if $current == "" and $c == '"' {
+                $in_quote = true
+            } else if $c != " " {
+                $current = $current ++ $c
+            } else if $current != "" {
+                $args = ($args | append $current)
+                $current = ""
+            }
+        }
+    }
+    if $current != "" {
+        $args = ($args | append $current)
+    }
+    $args
+}
+
+# Decode a file:// URI to a local path, but only if it has no host or names
+# this machine.
+def decode_local_file_uri [uri: string, hostname: string]: nothing -> string {
+    if not ($uri | str starts-with "file://") { return "" }
+    let rest = ($uri | str substring 7..)
+    # Strip query/fragment, anything before is the [host]/path
+    let stripped = ($rest | str replace --regex '[?#].*$' '')
+    let slash = ($stripped | str index-of "/")
+    let host = if $slash < 0 { $stripped } else { $stripped | str substring 0..$slash }
+    let path = if $slash < 0 { "" } else { $stripped | str substring $slash.. }
+    if not ($host | is-empty) and $host != "localhost" and $host != $hostname { return "" }
+    if ($path | is-empty) { return "" }
+    percent_decode $path
+}
+
+# Expand a single Exec arg, walking it character by character to handle
+# in-text field codes (%f, %u, %c, %%, etc).
+def expand_inline_field_codes [
+    arg: string,
+    files: list<string>,
+    uris: list<string>,
+    name_value: string,
+]: nothing -> record {
+    let chars = ($arg | split chars)
+    let n = ($chars | length)
+    mut out = ""
+    mut file_used = 0
+    mut err = ""
+    mut i = 0
+    while $i < $n {
+        let c = ($chars | get $i)
+        if $c != "%" {
+            $out = $out ++ $c
+            $i = $i + 1
+            continue
+        }
+        if ($i + 1) >= $n { break }
+        let code = ($chars | get ($i + 1))
+        $i = $i + 2
+        match $code {
+            "%" => { $out = $out ++ "%" }
+            "f" => {
+                $out = $out ++ ($files | get 0? | default "")
+                $file_used = $file_used + 1
+            }
+            "u" => {
+                $out = $out ++ ($uris | get 0? | default "")
+                $file_used = $file_used + 1
+            }
+            "c" => { $out = $out ++ $name_value }
+            "k" | "d" | "D" | "n" | "N" => { }
+            "i" | "U" | "F" => {
+                $err = $"xdg-open: Field code %($code) must be stand alone as it expands into multiple arguments!"
+            }
+            _ => { $err = $"xdg-open: Unknown field code: %($code) in Exec key!" }
+        }
+    }
+    {arg: $out, file_used: $file_used, err: $err}
+}
+
+# Build the argv for opening `file`/`uri` with `desktop_file`. Returns
+# {ok: bool, message: string, cmd: string, args: list<string>}.
+def --env compute_desktop_command [desktop_file: string, file: string, uri: string, hostname: string]: nothing -> record {
+    # files[] / uris[] mirror the awk semantics. A URI argument can be a
+    # space-separated list, and we also try to decode each into a local path.
+    let split_uris = if ($uri | is-empty) { [] } else { $uri | split row " " | where { not ($in | is-empty) } }
+    mut files: list<string> = []
+    mut uris: list<string> = $split_uris
+    for u in $split_uris {
+        if not ($file | is-empty) {
+            let decoded = (decode_local_file_uri $u $hostname)
+            if not ($decoded | is-empty) {
+                $files = ($files | append $decoded)
+            }
+        }
+    }
+    if not ($file | is-empty) {
+        $files = ($files | append $file)
+        if ($uris | is-empty) {
+            $uris = [$file]
+        }
+    }
+
+    let entry = (desktop_section_lines $desktop_file "Desktop Entry")
+    mut exec_value = ""
+    mut term_value = ""
+    mut icon_value = ""
+    mut name_value = ""
+    for line in $entry {
+        let m = ($line | parse --regex '^(?P<key>[^#=\[]+)(?:\[(?P<local>[^]=]*)\])?=(?P<value>.*)$' | first?)
+        if $m == null { continue }
+        let key = ($m.key | str trim)
+        let local = ($m.local | default "")
+        let value = $m.value
+        match $key {
+            "Exec" => { if ($exec_value | is-empty) { $exec_value = (unescape_desktop_value $value) } }
+            "Terminal" => { if ($term_value | is-empty) { $term_value = $value } }
+            "Icon" => { if ($icon_value | is-empty) { $icon_value = (unescape_desktop_value $value) } }
+            "Name" => { if ($name_value | is-empty) and ($local | is-empty) { $name_value = (unescape_desktop_value $value) } }
+            _ => { }
+        }
+    }
+
+    if ($exec_value | is-empty) {
+        return {ok: false, message: "xdg-open: No Exec= line found in main section of desktop file!", cmd: "", args: []}
+    }
+
+    let raw_args = (split_exec_value $exec_value)
+    mut expanded: list<string> = []
+    if $term_value == "true" {
+        $expanded = ($expanded | append "xdg-terminal")
+    }
+    mut found_codes = 0
+    for arg in $raw_args {
+        if $arg == "%F" {
+            $expanded = ($expanded ++ $files)
+            $found_codes = $found_codes + 1
+            continue
+        }
+        if $arg == "%U" {
+            $expanded = ($expanded ++ $uris)
+            $found_codes = $found_codes + 1
+            continue
+        }
+        if $arg == "%i" {
+            if not ($icon_value | is-empty) {
+                $expanded = ($expanded | append "--icon" | append $icon_value)
+            }
+            continue
+        }
+        let r = (expand_inline_field_codes $arg $files $uris $name_value)
+        if not ($r.err | is-empty) {
+            return {ok: false, message: $r.err, cmd: "", args: []}
+        }
+        $found_codes = $found_codes + $r.file_used
+        if $found_codes > 1 {
+            return {ok: false, message: "xdg-open: More than one file field codes (%f, %F, %u, %U) in Exec key, this .desktop file is invalid!", cmd: "", args: []}
+        }
+        $expanded = ($expanded | append $r.arg)
+    }
+    if $found_codes == 0 {
+        let extra = if not ($files | is-empty) { $files | get 0 } else { $uris | get 0? | default "" }
+        if not ($extra | is-empty) {
+            $expanded = ($expanded | append $extra)
+        }
+    }
+    if ($expanded | is-empty) {
+        return {ok: false, message: "xdg-open: Exec line expanded to no arguments", cmd: "", args: []}
+    }
+    {ok: true, message: "", cmd: ($expanded | get 0), args: ($expanded | skip 1)}
+}
+
 # Recursively search .desktop file
 
-# The awk script for parsing .desktop files (embedded from original xdg-open.in)
-const AWK_SCRIPT_OPEN_WITH_DESKTOP_FILE = '
-BEGIN {
-
-	debug_level = ENVIRON["XDG_UTILS_DEBUG_LEVEL"]
-
-	if (uri_arg) {
-		split(uri_arg, split_uri_arg, " ")
-	}
-
-	has_uri = 0;
-	filec = 0;
-	for (i=1; split_uri_arg[i]; i++) {
-		has_uri = 1;
-		uri = split_uri_arg[i]
-		uris[i-1] = uri;
-		debug(2, "URI: " uri)
-		if (file_arg != "") {
-			file = decode_local_file_uri(uri)
-			if (file) {
-				debug(2, "File: " file)
-				files[filec] = file;
-				filec = filec + 1;
-			}
-		}
-	}
-
-	if (file_arg != "") {
-		debug(2, "File: " file_arg)
-		files[filec] = file_arg;
-		filec = filec + 1;
-		if (!has_uri) {
-			debug(2, "URI (falling back to file path): " file_arg)
-			uris[0] = file_arg
-		}
-	}
-
-	in_main_section = 0;
-
-	exec_value = 0;
-	term_value = 0;
-	icon_value = 0;
-	name_value = 0;
-}
-
-/^\[/ {
-	in_main_section = 0;
-}
-
-$0 == "[Desktop Entry]" {
-	in_main_section = 1
-}
-
-function unescape_value(escaped) {
-	value = ""
-	for (i=1; i<=length(escaped); i++) {
-		char = substr(escaped, i, 1)
-		if (char == "\\") {
-			i = i+1
-			next_char = substr(escaped,i,1);
-			if (next_char == "s") {
-				value = value " ";
-			} else if (next_char == "n") {
-				value = value "\n";
-			} else if (next_char == "t") {
-				value = value "\t";
-			} else if (next_char == "r") {
-				value = value "\r";
-			} else if (next_char == "\\") {
-				value = value "\\";
-			}
-		} else {
-			value = value char
-		}
-	}
-	return value;
-}
-
-function split_exec_value(value, out_args) {
-	argc = 0;
-	in_quote = 0;
-	current_arg = "";
-	next_is_literal = 0;
-	for (i=1; i<=length(value); i++) {
-		char = substr(value,i,1)
-		if (next_is_literal) {
-			next_is_literal = 0;
-			current_arg = current_arg char
-			continue
-		}
-		if (in_quote) {
-			if (char == "\"") {
-				in_quote = 0;
-				out_args[argc] = current_arg;
-				argc = argc + 1;
-				current_arg = "";
-			} else if (char == "\\") {
-				next_is_literal = 1;
-			} else {
-				current_arg = current_arg char
-			}
-		} else {
-			if (current_arg == "" && char == "\"") {
-				in_quote = 1;
-			} else if (char != " ") {
-				current_arg = current_arg char
-			} else if (current_arg != "") {
-				out_args[argc] = current_arg;
-				argc = argc + 1;
-				current_arg = "";
-			}
-		}
-	}
-	if (current_arg != "") {
-		out_args[argc] = current_arg;
-	}
-}
-
-function hex_value(char) {
-	value = char - "0";
-	if (value >= 0 && value < 10) {
-		return value;
-	}
-	value = char - "a";
-	if (value >= 10 && value < 16) {
-		return value;
-	}
-	value = char - "A";
-	if (value >= 10 && value < 16) {
-		return value;
-	}
-	return 0;
-}
-
-function uri_decode(text) {
-	output = ""
-	for (i=1; i<=length(text); i++) {
-		char = substr(text, i, 1);
-		if (char != "%") {
-			output = output char;
-			continue
-		}
-		char_a = substr(text, i+1, 1);
-		char_b = substr(text, i+2, 1);
-		i = i+2;
-		numeric = hex_value(char_a)*16+hex_value(char_b);
-		if (numeric != 0 && numeric != 47) {
-			output = output sprintf("%c", numeric)
-		}
-	}
-	return output;
-}
-
-function decode_local_file_uri(uri) {
-	if (!match(uri, /^file:\\/\\//)) {
-		return 0;
-	}
-	host = ""
-	path = 0
-	slash_count = 0
-	host_start = 0
-	host_end = 0
-	path_start = 0
-	for (i=1; i<=length(uri); i++) {
-		char = substr(text, i, 1);
-		if (char == "/") {
-			slash_count++;
-			if (slash_count == 2) {
-				host_start = i;
-			}
-			if (slash_count == 3) {
-				path_start = i;
-			}
-			continue
-		} else if (host_start && char == ":") {
-			host_end = i;
-		} else if (char == "?" || char == "#") {
-			if (path_start) {
-				path = substr(uri, path_start, i - path_start)
-			}
-			# ignore that we would not fully parse the hostname in this case,
-			# if the hostname is not finished here it will fail anyway.
-			break
-		}
-		if (host_start && host_end) {
-			host = substr(uri, host_start, host_end - host_start);
-		}
-	}
-	# Hostname must either be empty, "localhost" or match local hostname
-	if (host != "" && host != "localhost" && host != hostname) {
-		return 0;
-	}
-	if (path) {
-		return uri_decode(path)
-	}
-	return 0;
-}
-
-function debug(level, text) {
-	if (!debug_level) {
-		return;
-	}
-	if (level <= debug_level) {
-		print "DEBUG: " text >> "/dev/stderr";
-	}
-}
-
-function error(text) {
-	printf("err\\0");
-	print "xdg-open ERROR: " text >> "/dev/stderr";
-	exit 4
-}
-
-in_main_section && match($0, /^[^#=\[]+\[?[^=\]]*\]?=/) {
-	index_of_eq = index($0, "=");
-	index_of_bracket_open = index($0, "[");
-	if (index_of_bracket_open && index_of_bracket_open < index_of_eq) {
-		key = substr($0, 1, index_of_bracket_open-1)
-		local = substr($0, index_of_bracket_open+1, index_of_eq-index_of_bracket_open-2);
-	} else {
-		key = substr($0, 1, index_of_eq-1);
-		local = "";
-	}
-	value = substr($0, index_of_eq+1);
-	debug(4, "Key: " key " Local: " local " Value: " value);
-	if (key == "Exec") {
-		exec_value = unescape_value(value);
-	} else if (key == "Terminal") {
-		term_value = value;
-	} else if (key == "Icon") {
-		icon_value = unescape_value(value);
-	} else if (key == "Name") {
-		# TODO: handle actual localization
-		if (local == "") {
-			name_value = unescape_value(value)
-		}
-	}
-}
-
-END {
-	if (!exec_value) {
-		print "xdg-open: No Exec= line found in main section of desktop file!" >> "/dev/stderr";
-		exit 1;
-	}
-	debug(2, "Unescaped: " exec_value)
-	split_exec_value(exec_value, args)
-	# Field code expansion
-	expanded_args[0] = "";
-	eargc = 0;
-	if (term_value == "true") {
-		expanded_args[0] = "xdg-terminal";
-		eargc = 1;
-	}
-	found_file_field_codes = 0;
-	for (i=0; args[i]; i++) {
-		arg = args[i];
-		debug(2, "Running field code expansion on arg: " arg);
-		if (arg == "%F") {
-			for (j=0; j<length(files); j++) {
-				expanded_args[eargc] = files[j];
-				eargc = eargc + 1;
-			}
-			found_file_field_codes++;
-			continue
-		} else if (arg == "%U") {
-			for (j=0; j<length(uris); j++) {
-				expanded_args[eargc] = uris[j];
-				eargc = eargc + 1;
-			}
-			found_file_field_codes++;
-			continue
-		} else if (arg == "%i") {
-			if (icon_value) {
-				expanded_args[eargc] = "--icon"
-				expanded_args[eargc] = icon_value
-				eargc = eargc + 1;
-			}
-			continue
-		}
-		debug(2, "Trying to find in-text field code ...");
-		expanded_arg = ""
-		for (j=1; j<=length(arg); j++) {
-			char = substr(arg,j,1);
-			if (char != "%") {
-				expanded_arg = expanded_arg char
-				continue
-			}
-			j = j+1;
-			char = substr(arg,j,1);
-			debug(2, "Found field code expansion: %" char);
-			if (char == "%") {
-				expanded_arg = expanded_arg "%"
-			} else if (char == "f") {
-				# Take just the first arg for the prototype
-				expanded_arg = expanded_arg files[0];
-				found_file_field_codes++;
-			} else if (char == "u") {
-				# Take just the first arg for the prototype
-				expanded_arg = expanded_arg uris[0];
-				found_file_field_codes++;
-			} else if (char == "c") {
-				if (name_value) {
-					expanded_arg = expanded_arg name_value
-				}
-			} else if (char == "k") {
-				# Location of desktop file either as URI or local filename
-				# Ignore for now
-				# TODO
-			} else if (char == "d" || char == "D" || char == "n" || char == "N") {
-				# Deprecated, silently remove
-			} else if (char == "i" || char == "U" || char == "F") {
-				error("xdg-open: Field code %" char "must be stand alone as it expands into multiple arguments!")
-			} else {
-				error("xdg-open: Unknown field code: %" char " in Exec key!")
-			}
-		}
-		if (found_file_field_codes > 1) {
-			error("xdg-open: More than one file field codes (%f, %F, %u, %U) in Exec key, this .desktop file is invalid!")
-		}
-		expanded_args[eargc] = expanded_arg;
-		eargc = eargc + 1;
-	}
-
-	if (found_file_field_codes == 0) {
-		debug(1, "Did not find a file field code (%f, %F, %u, %U), appending filepath/url as last argument");
-		if (files[0]) {
-			expanded_args[eargc] = files[0];
-		} else {
-			expanded_args[eargc] = uris[0];
-		}
-		eargc = eargc + 1;
-	}
-
-	printf("cmd\\0");
-	for (i=0; expanded_args[i]; i++) {
-		debug(1, "Arg: " expanded_args[i]);
-		printf("%s\\0", expanded_args[i]);
-	}
-	exit
-}
-'
 
 # Open a file using a desktop file entry
 # (desktop_file, file, uri (optional))
 def --env open_with_desktop_file [desktop_file: string, file: string, uri: string = ""] {
     let hostname = (get_hostname)
-
-    # Feed the .desktop file into awk on stdin.
-    let result = (
-        open --raw $desktop_file
-        | ^awk -v $"hostname=($hostname)" -v $"file_arg=($file)" -v $"uri_arg=($uri)" $AWK_SCRIPT_OPEN_WITH_DESKTOP_FILE
-        | complete
-    )
-
-    if ($result.exit_code) != 0 {
-        if not (($result.stdout) | is-empty) and (($result.stdout) | str starts-with "err") {
-            exit_failure_operation_failed
-        }
-    }
-
-    # The awk script writes "cmd\0<arg0>\0<arg1>\0..." on success.
-    if (($result.stdout) | is-empty) {
+    let result = (compute_desktop_command $desktop_file $file $uri $hostname)
+    if not $result.ok {
+        print --stderr $result.message
         exit_failure_operation_failed
     }
-
-    let parts = (($result.stdout) | split row "\u{0}")
-    let first = ($parts | get 0? | default "")
-    if $first != "cmd" {
-        exit_failure_operation_failed
-    }
-
-    let cmd_parts = ($parts | skip 1 | where { ($in | is-not-empty) })
-    if ($cmd_parts | is-empty) {
-        exit_failure_operation_failed
-    }
-
-    let cmd = ($cmd_parts | get 0)
-    let args = ($cmd_parts | skip 1)
-
-    let exec_result = (^$cmd ...$args | complete)
+    let exec_result = (^$result.cmd ...$result.args | complete)
     if ($exec_result.exit_code) != 0 {
         exit_failure_operation_failed
     }
-
     exit_success
 }
 

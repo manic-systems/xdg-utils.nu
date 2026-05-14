@@ -65,6 +65,35 @@ export def first_word [text: string] {
     if not ($parts | is-empty) { $parts.0 } else { "" }
 }
 
+# Return the lines inside a single `[Section]` block of a Desktop Entry file,
+# stopping at the next `[Other Section]` header.
+export def desktop_section_lines [path: string, section: string]: nothing -> list<string> {
+    let header = $"[($section)]"
+    let all = (open --raw $path | lines)
+    let start = ($all | enumerate | where {|e| $e.item == $header } | get index.0?)
+    if $start == null { return [] }
+    let tail = ($all | skip ($start + 1))
+    let end = ($tail | enumerate | where {|e| $e.item | str starts-with "[" } | get index.0?)
+    if $end == null { return $tail }
+    $tail | take $end
+}
+
+# Pull the text content out of every occurrence of `<tag>...</tag>` in an XML
+# file, one line per match. Handles the simple flat menu/directory files xdg
+# generates without needing a real XML parser.
+export def extract_xml_tag_contents [path: string, tag: string]: nothing -> string {
+    open --raw $path
+    | split row "<"
+    | each {|rec|
+        if not ($rec | str starts-with $tag) { return null }
+        let gt = ($rec | str index-of ">")
+        if $gt < 0 { return null }
+        $rec | str substring (($gt + 1)..)
+    }
+    | where {|x| $x != null and not ($x | is-empty) }
+    | str join "\n"
+}
+
 # Decode a percent-encoded string, walking the bytes so that multi-byte UTF-8
 # sequences survive intact.
 export def percent_decode [s: string]: nothing -> string {
@@ -222,15 +251,20 @@ export def --env desktop_file_to_binary [desktop_file: string] {
             DEBUG 2 $"Checking desktop file '($file_path)'"
             # Get the command name from the correct Exec
             # Note: Ignoring quoting and escape sequences here, see #253
-            let awk_script = '/^\[/{in_entry=0} $0=="[Desktop Entry]"{in_entry=1} in_entry&&/^Exec[[:space:]]*=/{split($0,a,"="); cmd=a[2]; sub(/^[[:space:]]+/,"",cmd); match(cmd,/^[^[:space:]]+/); print substr(cmd,RSTART,RLENGTH); exit}'
-            let binary_result = (^awk $awk_script $file_path | complete)
-
-            if ($binary_result.exit_code) != 0 {
-                DEBUG 2 "No or empty Exec key in .desktop file. Search failed."
-                return null
+            let entry_lines = (desktop_section_lines $file_path "Desktop Entry")
+            let exec_line = ($entry_lines | where {|l| $l =~ '^Exec[[:space:]]*=' } | get 0? | default "")
+            let binary = if ($exec_line | is-empty) {
+                ""
+            } else {
+                $exec_line
+                | split row "="
+                | skip 1
+                | str join "="
+                | str trim
+                | split row --regex '[[:space:]]+'
+                | get 0?
+                | default ""
             }
-
-            let binary = (($binary_result.stdout) | str trim)
             if ($binary | is-empty) {
                 DEBUG 2 "No or empty Exec key in .desktop file. Search failed."
                 return null

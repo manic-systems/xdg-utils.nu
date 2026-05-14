@@ -243,6 +243,28 @@ def --env open_generic [mailto: string, attach: string] {
     exit_failure_operation_failed
 }
 
+# Percent-encode a mailto: body byte-by-byte. Preserves `@`, alphanumerics,
+# `.`, `-`, `\` and `/`, joins lines with `%0D%0A`, and encodes everything else.
+def percent_encode_mailto_body [s: string]: nothing -> string {
+    let pieces = ($s | lines | each {|line|
+        let bin = ($line | encode utf-8)
+        0..<($bin | length)
+        | each {|i|
+            let slice = ($bin | bytes at $i..$i)
+            let hex = ($slice | encode hex)
+            let b = ($hex | into int --radix 16)
+            if $b < 128 {
+                let c = ($slice | decode)
+                if $c =~ '[@a-zA-Z0-9.\-\\/]' { $c } else { $"%($hex)" }
+            } else {
+                $"%($hex)"
+            }
+        }
+        | str join ""
+    })
+    $pieces | str join "%0D%0A"
+}
+
 # URL encode string
 def --env url_encode [input: string] {
     # Save original locale settings
@@ -258,31 +280,7 @@ def --env url_encode [input: string] {
         ($input | ^iconv -t utf8 | complete | get stdout)
     }
 
-    let encoded = ($input_str | ^awk '
-BEGIN {
-    for ( i=1; i<=255; ++i ) ord [ sprintf ("%c", i) "" ] = i + 0
-    e = ""
-    linenr = 1
-}
-{
-    if ( linenr++ != 1 ) {
-        e = e "%0D%0A"
-    }
-    for ( i=1; i<=length ($0); ++i ) {
-        c = substr ($0, i, 1)
-        if ( ord [c] > 127 ) {
-            e = e "%" sprintf("%02X", ord [c])
-        } else if ( c ~ /[@a-zA-Z0-9.\-\\\/]/ ) {
-            e = e c
-        } else {
-            e = e "%" sprintf("%02X", ord [c])
-        }
-    }
-}
-END {
-    print e
-}
-' | complete | get stdout | str trim)
+    let encoded = (percent_encode_mailto_body $input_str)
 
     # Restore original locale settings
     $env.LANG = $orig_lang

@@ -3,6 +3,137 @@
 
 use xdg-utils-common.nu *
 
+# Read the first value of `mimetype=...` from the [Default Applications]
+# section of a mimeapps.list file. Returns "" when not present.
+def read_mimeapps_default [path: string, mimetype: string]: nothing -> string {
+    let prefix = $"($mimetype)="
+    mut in_default = false
+    mut found = ""
+    for line in (open --raw $path | lines) {
+        if not ($found | is-empty) { break }
+        if ($line | str starts-with "[Default Applications]") {
+            $in_default = true
+            continue
+        }
+        if ($line | str starts-with "[") {
+            $in_default = false
+            continue
+        }
+        if $in_default and ($line | str starts-with $prefix) {
+            $found = ($line | str substring (($prefix | str length)..))
+        }
+    }
+    $found
+}
+
+# Rewrite a mimeapps.list so that the [Default Applications] entry for
+# `mimetype` becomes `application`. Inserts the section/entry when absent.
+def update_mimeapps_default_application [path: string, mimetype: string, application: string]: nothing -> string {
+    let prefix = $"($mimetype)="
+    let all = (open --raw $path | lines)
+    mut out: list<string> = []
+    mut in_default = false
+    mut saw_default = false
+    mut added = false
+    mut pending_blanks = 0
+    for line in $all {
+        if ($line | str starts-with "[Default Applications]") {
+            for _ in 0..<$pending_blanks { $out = ($out | append "") }
+            $pending_blanks = 0
+            $in_default = true
+            $saw_default = true
+            $out = ($out | append $line)
+            continue
+        }
+        if ($line | str starts-with "[") {
+            if not $added and $in_default {
+                $out = ($out | append $"($prefix)($application)")
+                $added = true
+            }
+            $in_default = false
+            for _ in 0..<$pending_blanks { $out = ($out | append "") }
+            $pending_blanks = 0
+            $out = ($out | append $line)
+            continue
+        }
+        if ($line | is-empty) {
+            $pending_blanks = $pending_blanks + 1
+            continue
+        }
+        for _ in 0..<$pending_blanks { $out = ($out | append "") }
+        $pending_blanks = 0
+        if $in_default and not $added and ($line | str starts-with $prefix) {
+            $out = ($out | append $"($prefix)($application)")
+            $added = true
+        } else {
+            $out = ($out | append $line)
+        }
+    }
+    if not $added {
+        if not $saw_default {
+            $out = ($out | append "")
+            $out = ($out | append "[Default Applications]")
+        }
+        $out = ($out | append $"($prefix)($application)")
+    }
+    for _ in 0..<$pending_blanks { $out = ($out | append "") }
+    ($out | str join "\n") ++ "\n"
+}
+
+# Rewrite a mimeapps.list so that `application` is the first entry under the
+# [Added Associations] section's `mimetype=...` line. Appends the section/entry
+# when absent, and dedupes the application if already present elsewhere in the
+# same line.
+def update_mimeapps_added_association [path: string, mimetype: string, application: string]: nothing -> string {
+    let prefix = $"($mimetype)="
+    let all = (open --raw $path | lines)
+    mut out: list<string> = []
+    mut in_added = false
+    mut found = false
+    mut pending_blanks = 0
+    for line in $all {
+        if ($line | str starts-with "[Added Associations]") {
+            for _ in 0..<$pending_blanks { $out = ($out | append "") }
+            $pending_blanks = 0
+            $in_added = true
+            $out = ($out | append $line)
+            continue
+        }
+        if ($line | str starts-with "[") {
+            if $in_added and not $found {
+                $out = ($out | append $"($prefix)($application)")
+                $found = true
+            }
+            $in_added = false
+            for _ in 0..<$pending_blanks { $out = ($out | append "") }
+            $pending_blanks = 0
+            $out = ($out | append $line)
+            continue
+        }
+        if ($line | is-empty) {
+            $pending_blanks = $pending_blanks + 1
+            continue
+        }
+        for _ in 0..<$pending_blanks { $out = ($out | append "") }
+        $pending_blanks = 0
+        if $in_added and ($line | str starts-with $prefix) {
+            let value = ($line | str substring (($prefix | str length)..))
+            let apps = ($value | split row ";" | where {|a| $a != "" and $a != $application })
+            let rebuilt = $"($application);" ++ ($apps | each {|a| $a ++ ";" } | str join "")
+            $out = ($out | append $"($prefix)($rebuilt)")
+            $found = true
+        } else {
+            $out = ($out | append $line)
+        }
+    }
+    if not $found {
+        if not $in_added { $out = ($out | append "[Added Associations]") }
+        $out = ($out | append $"($prefix)($application)")
+    }
+    for _ in 0..<$pending_blanks { $out = ($out | append "") }
+    ($out | str join "\n") ++ "\n"
+}
+
 # Update KDE cache
 def --env update_kde_cache [] {
     DEBUG 1 "Running kbuildsycoca"
@@ -181,50 +312,8 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
     }
 
     if $version > 3 {
-        # KDE 4+ logic using awk
-        let awk_script = '
-BEGIN { prefix=mimetype "="; associations=0; found=0; blanks=0 }
-{
-    suppress=0
-    if (index($0, "[Added Associations]") == 1) {
-        associations=1
-    } else if (index($0, "[") == 1) {
-        if (associations && !found) {
-            print prefix application
-            found=1
-        }
-        associations=0
-    } else if ($0 == "") {
-        blanks++
-        suppress=1
-    } else if (associations && index($0, prefix) == 1) {
-        value=substr($0, length(prefix) + 1, length())
-        split(value, apps, ";")
-        value=application ";"
-        count=0
-        for (i in apps) { count++ }
-        for (i=0; i < count; i++) {
-            if (apps[i] != application && apps[i] != "") {
-                value=value apps[i] ";"
-            }
-        }
-        $0=prefix value
-        found=1
-    }
-    if (!suppress) {
-        while (blanks > 0) { print ""; blanks-- }
-        print $0
-    }
-}
-END {
-    if (!found) {
-        if (!associations) { print "[Added Associations]" }
-        print prefix application
-    }
-    while (blanks > 0) { print ""; blanks-- }
-}'
         let new_file = $"($default_file).new"
-        ^awk $"-v application=($vendor)" $"-v mimetype=($mimetype)" $awk_script $default_file | save --force $new_file
+        update_mimeapps_added_association $default_file $mimetype $vendor | save --force $new_file
         ^mv $new_file $default_file
     }
 }
@@ -254,85 +343,29 @@ def --env make_default_generic [desktop_file: string, mimetype: string] {
         ^touch $out_file
     }
 
-    let awk_script = '
-BEGIN { prefix=mimetype "="; indefault=0; added=0; blanks=0; found=0 }
-{
-    suppress=0
-    if (index($0, "[Default Applications]") == 1) {
-        indefault=1
-        found=1
-    } else if (index($0, "[") == 1) {
-        if (!added && indefault) {
-            print prefix application
-            added=1
-        }
-        indefault=0
-    } else if ($0 == "") {
-        suppress=1
-        blanks++
-    } else if (indefault && !added && index($0, prefix) == 1) {
-        $0=prefix application
-        added=1
-    }
-    if (!suppress) {
-        while (blanks > 0) { print ""; blanks-- }
-        print $0
-    }
-}
-END {
-    if (!added) {
-        if (!found) { print ""; print "[Default Applications]" }
-        print prefix application
-    }
-    while (blanks > 0) { print ""; blanks-- }
-}
-'
     let new_file = $"($out_file).new"
-    ^awk $"-v mimetype=($mimetype)" $"-v application=($desktop_file)" $awk_script $out_file | save --force $new_file
+    update_mimeapps_default_application $out_file $mimetype $desktop_file | save --force $new_file
     ^mv $new_file $out_file
 }
 
-# Extract MIME types from XML file using awk
-def --env extract_mimetypes_from_xml [filename: string] {
-    let strip_comments_awk = '
-BEGIN { suppress=0 }
-{
-    do {
-        if (suppress) {
-            if (match($0,/-->/)) {
-                $0=substr($0,RSTART+RLENGTH)
-                suppress=0
-            } else {
-                break
-            }
-        } else {
-            if (match($0,/<!--/)) {
-                if (RSTART>1) print substr($0,0,RSTART)
-                $0=substr($0,RSTART+RLENGTH)
-                suppress=1
-            } else {
-                if ($0) print $0
-                break
-            }
-        }
-    } while(1)
+# Extract a `name="value"` or `name='value'` attribute from an XML tag.
+def xml_attr [tag_text: string, name: string]: nothing -> string {
+    let dq = ($tag_text | parse --regex ($name + '="(?P<v>[^"]*)"') | get v? | get 0? | default "")
+    if not ($dq | is-empty) { return $dq }
+    $tag_text | parse --regex ($name + "='(?P<v>[^']*)'") | get v? | get 0? | default ""
 }
-'
-    let extract_types_awk = '
-BEGIN { RS="<" }
-/^mime-info/, /^\/mime-info/ {
-    if (match($0,/^mime-type/)) {
-        if (match($0,/type="[^"]*/) || match($0,/type=.[^'\''']*/)) {
-            print substr($0,RSTART+6,RLENGTH-6)
-        }
+
+# Extract every `<mime-type type="...">` value from a shared-mime XML file.
+def --env extract_mimetypes_from_xml [filename: string]: nothing -> list<string> {
+    let content = (open --raw $filename | str replace --all --regex '(?s)<!--.*?-->' '')
+    $content
+    | split row "<"
+    | each {|rec|
+        if not ($rec | str starts-with "mime-type") { return null }
+        let v = (xml_attr $rec "type")
+        if ($v | is-empty) { null } else { $v }
     }
-}
-'
-    let result = (^awk $strip_comments_awk $filename | ^awk $extract_types_awk | complete)
-    if ($result.exit_code) == 0 {
-        return (($result.stdout) | lines | where { not ($it | is-empty) })
-    }
-    return []
+    | where {|x| $x != null }
 }
 
 # Create KDE desktop file from XML for a specific MIME type
@@ -340,117 +373,93 @@ def --env create_kde_desktop_from_xml [filename: string, mimetype: string, kde_d
     let basefile = ($filename | path basename)
     let desktop_file = ($kde_dir | path join $"($mimetype).desktop")
 
-    let strip_comments_awk = '
-BEGIN { suppress=0 }
-{
-    do {
-        if (suppress) {
-            if (match($0,/-->/)) {
-                $0=substr($0,RSTART+RLENGTH)
-                suppress=0
-            } else {
-                break
-            }
-        } else {
-            if (match($0,/<!--/)) {
-                if (RSTART>1) print substr($0,0,RSTART)
-                $0=substr($0,RSTART+RLENGTH)
-                suppress=1
-            } else {
-                if ($0) print $0
-                break
-            }
-        }
-    } while(1)
-}
-'
-
-    let extract_mimetype_awk = '
-# Extract mimetype from the XML file
-BEGIN {
-    the_type=ARGV[1]
-    ARGC=1
-    RS="<"
-    found=0
-    glob_patterns=""
-}
-/^mime-info/, /^\/mime-info/ {
-    if (match($0,/^mime-type/)) {
-        if (match($0,/type="[^"]*/) || match($0,/type=.[^'\''']*/)) {
-            if (substr($0,RSTART+6,RLENGTH-6) == the_type) {
-                found=1
-                print "[Desktop Entry]"
-                print "# Installed by xdg-mime from " the_source
-                print "Type=MimeType"
-                print "MimeType=" the_type
-                the_icon=the_type
-                gsub("/", "-", the_icon)
-                print "Icon=" the_icon
-            }
-        }
-    } else if (found) {
-        if (match($0,/^\/mime-type/)) {
-            if (glob_patterns)
-                print "Patterns=" glob_patterns
-            exit 0
-        }
-        if (match($0,/^sub-class-of/)) {
-            if (match($0,/type="[^"]*/) || match($0,/type=.[^'\''']*/)) {
-                print "X-KDE-IsAlso=" substr($0,RSTART+6,RLENGTH-6)
-            } else {
-                print "Error: '\''type'\'' argument missing in " RS $0
-                exit 1
-            }
-        }
-        if (match($0,/^glob/)) {
-            if (match($0,/pattern="[^"]*/) || match($0,/pattern=.[^'\''']*/)) {
-                glob_patterns = glob_patterns substr($0,RSTART+9,RLENGTH-9) ";"
-            } else {
-                print "Error: '\''pattern'\'' argument missing in " RS $0
-                exit 1
-            }
-        }
-        if (match($0,/^comment/)) {
-            if (match($0,/xml:lang="[^"]*/) || match($0,/xml:lang=.[^'\''']*/)) {
-                lang=substr($0,RSTART+10,RLENGTH-10)
-            } else {
-                lang=""
-            }
-            if (match($0,/>/)) {
-                comment=substr($0,RSTART+1)
-                gsub("&lt;", "<", comment)
-                gsub("&gt;", ">", comment)
-                gsub("&amp;", "\\&", comment)
-                if (lang)
-                    print "Comment[" lang "]=" comment
-                else
-                    print "Comment=" comment
-            }
-        }
-    }
-}
-END {
-    if (!found) {
-        print "Error: mimetype '\''" the_type "'\'' not found"
-        exit 1
-    }
-}
-'
-
     mkdir ($desktop_file | path dirname)
     let new_file = $"($desktop_file).new"
-    let result = (^awk $strip_comments_awk $filename | ^awk $"-v" $"the_type=($mimetype)" $"-v" $"the_source=($basefile)" $extract_mimetype_awk | complete)
-
-    if ($result.exit_code) != 0 {
-        if (($result.stdout) | str contains "Error:") {
-            print ($result.stdout)
-            error make { msg: "ERROR" }
-        }
+    let built = (build_kde_desktop_from_xml $filename $mimetype $basefile)
+    if $built.error {
+        print $built.message
+        error make { msg: "ERROR" }
+    }
+    if not $built.found {
         return false
     }
-    $result.stdout | save --force $new_file
+    $built.body | save --force $new_file
     ^mv $new_file $desktop_file
     return true
+}
+
+# Walk a shared-mime XML file, collecting the bits we need to mint a KDE 3-era
+# `<mime>.desktop` for a single mimetype. Returns {found, error, message, body}.
+def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source: string]: nothing -> record {
+    let content = (open --raw $filename | str replace --all --regex '(?s)<!--.*?-->' '')
+    let records = ($content | split row "<")
+    mut found = false
+    mut done = false
+    mut glob_patterns = ""
+    mut out: list<string> = []
+    let icon = ($mimetype | str replace --all "/" "-")
+    for rec in $records {
+        if $done { continue }
+        if ($rec | str starts-with "mime-type") {
+            let t = (xml_attr $rec "type")
+            if not $found and $t == $mimetype {
+                $found = true
+                $out = ($out
+                    | append "[Desktop Entry]"
+                    | append $"# Installed by xdg-mime from ($source)"
+                    | append "Type=MimeType"
+                    | append $"MimeType=($mimetype)"
+                    | append $"Icon=($icon)")
+            }
+            continue
+        }
+        if not $found { continue }
+        if ($rec | str starts-with "/mime-type") {
+            if not ($glob_patterns | is-empty) {
+                $out = ($out | append $"Patterns=($glob_patterns)")
+            }
+            $done = true
+            continue
+        }
+        if ($rec | str starts-with "sub-class-of") {
+            let t = (xml_attr $rec "type")
+            if ($t | is-empty) {
+                return {found: $found, error: true, message: $"Error: 'type' argument missing in <($rec)", body: ""}
+            }
+            $out = ($out | append $"X-KDE-IsAlso=($t)")
+            continue
+        }
+        if ($rec | str starts-with "glob") {
+            let p = (xml_attr $rec "pattern")
+            if ($p | is-empty) {
+                return {found: $found, error: true, message: $"Error: 'pattern' argument missing in <($rec)", body: ""}
+            }
+            $glob_patterns = $"($glob_patterns)($p);"
+            continue
+        }
+        if ($rec | str starts-with "comment") {
+            let lang = (xml_attr $rec "xml:lang")
+            let gt = ($rec | str index-of ">")
+            if $gt < 0 { continue }
+            let comment = (
+                $rec
+                | str substring (($gt + 1)..)
+                | str replace --all "&lt;" "<"
+                | str replace --all "&gt;" ">"
+                | str replace --all "&amp;" "&"
+            )
+            $out = if ($lang | is-empty) {
+                $out | append $"Comment=($comment)"
+            } else {
+                $out | append $"Comment[($lang)]=($comment)"
+            }
+            continue
+        }
+    }
+    if not $found {
+        return {found: false, error: true, message: $"Error: mimetype '($mimetype)' not found", body: ""}
+    }
+    {found: true, error: false, message: "", body: (($out | str join "\n") ++ "\n")}
 }
 
 # Install mimetypes from XML file
@@ -666,7 +675,17 @@ def --env defapp_fallback [mimetype: string] {
         let apps_dir = ($dir | path join "applications")
         if ($apps_dir | path type) == "dir" {
             for x in (search_desktop_file $mimetype $apps_dir) {
-                let pref_text = (^awk -F"=" "/InitialPreference=/ {print($2)}" $x | complete | get stdout | str trim)
+                let pref_text = (
+                    open --raw $x
+                    | lines
+                    | where {|l| $l | str contains "InitialPreference=" }
+                    | get 0?
+                    | default ""
+                    | split row "="
+                    | get 1?
+                    | default ""
+                    | str trim
+                )
                 let pref = ($pref_text | try { into int } catch { 0 })
                 DEBUG 2 $" Checking ($x)"
                 if $pref > $preference {
@@ -695,21 +714,9 @@ def --env check_mimeapps_list [mimetype: string, dir: string] {
         let mimeapps_list = ($dir | path join $"($prefix)mimeapps.list")
         if ($mimeapps_list | path type) == "file" {
             DEBUG 2 $"Checking ($mimeapps_list)"
-            let result = (^awk $"-v mimetype=($mimetype)" '
-BEGIN { prefix=mimetype "="; indefault=0; found=0 }
-{
-    if (index($0, "[Default Applications]") == 1) {
-        indefault=1
-    } else if (index($0, "[") == 1) {
-        indefault=0
-    } else if (!found && indefault && index($0, prefix) == 1) {
-        print substr($0, length(prefix) +1, length())
-        found=1
-    }
-}
-' $mimeapps_list | complete)
-            if not (($result.stdout) | is-empty) {
-                let app_list = (($result.stdout) | split row ";")
+            let value = (read_mimeapps_default $mimeapps_list $mimetype)
+            if not ($value | is-empty) {
+                let app_list = ($value | split row ";")
                 for app in $app_list {
                     if (not ($app | is-empty)) and (desktop_file_to_binary $app | is-not-empty) {
                         print $app

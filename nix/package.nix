@@ -4,7 +4,6 @@
   nushell,
   makeWrapper,
   coreutils,
-  gawk,
   glib,
   shared-mime-info,
   xprop,
@@ -12,7 +11,6 @@
 }: let
   runtimeDeps = [
     coreutils
-    gawk
     glib.bin
     nushell
     shared-mime-info

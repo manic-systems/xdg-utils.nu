@@ -24,17 +24,16 @@ def --env update_desktop_database [mode: string] {
 # mode: Installation mode (user or system)
 def --env make_lazy_default [dir: string, basefile: string, mode: string] {
     DEBUG 1 $"make_lazy_default ($dir)/($basefile)"
-    let mimetypes = (^awk '
-{
-    if (match($0,/MimeType=/)) {
-        split(substr($0,RSTART+9),mimetypes,";")
-        for (n in mimetypes) {
-            if (mimetypes[n])
-                print mimetypes[n]
+    let mimetypes = (
+        open --raw ($dir | path join $basefile)
+        | lines
+        | each {|l|
+            let idx = ($l | str index-of "MimeType=")
+            if $idx < 0 { return [] }
+            $l | str substring (($idx + 9)..) | split row ";" | where { not ($in | is-empty) }
         }
-    }
-}
-' ($dir | path join $basefile) | complete | get stdout | split row "\n" | where { not ($in | is-empty) })
+        | flatten
+    )
 
     for MIME in $mimetypes {
         mut xdg_default_dirs = if (not ($env.XDG_DATA_DIRS? == null) and not ($env.XDG_DATA_DIRS | is-empty)) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
@@ -147,14 +146,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
 
     let tmpfile = (^mktemp | complete | get stdout | str trim)
     if ($orig_menu_file | path type) == "file" {
-        ^awk '
-BEGIN { RS="<" }
-/^Filename/ {
-    if (match($0,/>/)) {
-        print substr($0,RSTART+1)
-    }
-}
-' $orig_menu_file | save --force $tmpfile
+        extract_xml_tag_contents $orig_menu_file "Filename" | save --force $tmpfile
     }
 
     let orig_desktop_files = (open --raw $tmpfile | split row "\n" | where { not ($in | is-empty) })
@@ -229,13 +221,7 @@ BEGIN { RS="<" }
         for mf in (glob ($xdg_dir | path join "*")) {
             let referenced = (open --raw $mf | str contains "xdg-utils")
             if $referenced {
-                ^awk '
-BEGIN { RS="<" }
-/^Directory/ {
-  if (match($0,/>/)) {
-     print substr($0,RSTART+1)
-  }
-}' $mf | save --append $tmpfile
+                extract_xml_tag_contents $mf "Directory" | save --append $tmpfile
             }
         }
         let referenced_set = (open --raw $tmpfile | lines)
