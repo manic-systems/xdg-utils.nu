@@ -837,8 +837,20 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
     }
 }
 
-# Main entry point
+# xdg-settings - get various settings from the desktop environment
+# Synopsis: xdg-settings { get | check | set } {property} [subproperty] [value]
+# Synopsis: xdg-settings { --help | --list | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-settings" $args [
+        "xdg-settings - get various settings from the desktop environment"
+        ""
+        "Synopsis"
+        ""
+        "xdg-settings { get | check | set } {property} [subproperty] [value]"
+        ""
+        "xdg-settings { --help | --list | --manual | --version }"
+    ]
+
     if not ($args | is-empty) and (($args | get 0) == "--list") {
         print "Known properties:"
         print "  default-web-browser           Default web browser"

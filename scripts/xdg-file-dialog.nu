@@ -210,8 +210,20 @@ def --env directory_zenity [filename: string] {
     exit_failure_operation_impossible
 }
 
-# Main entry point
+# xdg-file-dialog - command line tool for showing desktop file chooser dialogs
+# Synopsis: xdg-file-dialog { open | open-multiple | save | directory } [options]
+# Synopsis: xdg-file-dialog { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-file-dialog" $args [
+        "xdg-file-dialog - command line tool for showing desktop file chooser dialogs"
+        ""
+        "Synopsis"
+        ""
+        "xdg-file-dialog { open | open-multiple | save | directory } [options]"
+        ""
+        "xdg-file-dialog { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }

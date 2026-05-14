@@ -83,7 +83,24 @@ def update_icon_database [dir: string] {
     }
 }
 
+# xdg-icon-resource - command line tool for (un)installing icon resources
+# Synopsis: xdg-icon-resource install [--noupdate] [--novendor] [--theme theme] [--context context] [--mode mode] --size size icon-file [icon-name]
+# Synopsis: xdg-icon-resource uninstall [--noupdate] [--theme theme] [--context context] [--mode mode] --size size icon-name
+# Synopsis: xdg-icon-resource forceupdate [--theme theme] [--mode mode]
+# Synopsis: xdg-icon-resource { --help | --manual | --version }
 def main [...args] {
+    handle_standard_options "xdg-icon-resource" $args [
+        "xdg-icon-resource - command line tool for (un)installing icon resources"
+        ""
+        "Synopsis"
+        ""
+        "xdg-icon-resource install [--noupdate] [--novendor] [--theme theme] [--context context] [--mode mode] --size size icon-file [icon-name]"
+        "xdg-icon-resource uninstall [--noupdate] [--theme theme] [--context context] [--mode mode] --size size icon-name"
+        "xdg-icon-resource forceupdate [--theme theme] [--mode mode]"
+        ""
+        "xdg-icon-resource { --help | --manual | --version }"
+    ]
+
     if ($args | is-empty) {
         exit_failure_syntax
     }
