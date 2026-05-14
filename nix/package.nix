@@ -5,7 +5,6 @@
   makeWrapper,
   coreutils,
   glib,
-  shared-mime-info,
   xprop,
   xset,
 }: let
@@ -13,7 +12,6 @@
     coreutils
     glib.bin
     nushell
-    shared-mime-info
     xprop
     xset
   ];
