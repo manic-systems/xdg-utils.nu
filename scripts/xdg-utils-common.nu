@@ -389,11 +389,11 @@ export def --env detectDE [] {
     if ($env.DE? == null) {
         let uname_result = (^uname | complete)
         if ($uname_result.exit_code) == 0 {
-            let os = ($uname_result.stdout)
+            let os = ($uname_result.stdout | str trim)
             if ($os | str starts-with "CYGWIN") { $env.DE = "cygwin" }
             if ($env.DE? == null) and ($os == "Darwin") { $env.DE = "darwin" }
             if ($env.DE? == null) and ($os == "Linux") {
-                if ((^grep -q "microsoft" $"/proc/version" | complete).exit_code == 0) and ((^which explorer.exe | complete).exit_code == 0) {
+                if (("/proc/version" | path type) == "file") and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
                     $env.DE = "wsl"
                 }
             }
