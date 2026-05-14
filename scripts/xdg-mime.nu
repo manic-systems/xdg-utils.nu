@@ -90,21 +90,36 @@ def --env info_lxqt [filename: string] {
     exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
 }
 
-# Query MIME type generically
+# Query MIME type generically using whatever's on PATH.
 def --env info_generic [filename: string] {
-    let result = if (which mimetype | is-not-empty) {
-        (^mimetype --brief --dereference $filename | complete)
-    } else if (which file | is-not-empty) {
-        (^file --brief --dereference --mime-type $filename | complete)
-    } else {
-        exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
+    if (which gio | is-not-empty) {
+        let result = (^gio info --attributes=standard::content-type $filename | complete)
+        if ($result.exit_code) == 0 {
+            let mime = (
+                $result.stdout
+                | lines
+                | where { $in | str contains "standard::content-type:" }
+                | get 0?
+                | default ""
+                | parse --regex 'standard::content-type:\s*(?P<m>\S+)'
+                | get m?
+                | get 0?
+                | default ""
+            )
+            if not ($mime | is-empty) {
+                print $mime
+                exit_success
+            }
+        }
     }
-
-    if ($result.exit_code) == 0 {
-        print (($result.stdout) | str trim)
-        exit_success
+    if (which mimetype | is-not-empty) {
+        let result = (^mimetype --brief --dereference $filename | complete)
+        if ($result.exit_code) == 0 {
+            print (($result.stdout) | str trim)
+            exit_success
+        }
     }
-    exit_failure_operation_failed
+    exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
 }
 
 # make_default_* functions that set a given desktop file as the handler for a given mimetype

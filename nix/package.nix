@@ -5,7 +5,6 @@
   makeWrapper,
   coreutils,
   dbus,
-  file,
   gawk,
   glib,
   gnugrep,
@@ -21,7 +20,6 @@
   runtimeDeps = [
     coreutils
     dbus
-    file
     gawk
     glib.bin
     gnugrep
