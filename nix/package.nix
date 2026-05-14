@@ -4,7 +4,6 @@
   nushell,
   makeWrapper,
   coreutils,
-  dbus,
   gawk,
   glib,
   gnugrep,
@@ -17,7 +16,6 @@
 }: let
   runtimeDeps = [
     coreutils
-    dbus
     gawk
     glib.bin
     gnugrep

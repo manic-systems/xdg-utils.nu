@@ -223,12 +223,13 @@ def --env set_browser_kde [desktop_file: string] {
 def --env read_deepin_browser [] {
     let ret = (get_browser_mime "x-scheme-handler/http")
     if ($ret | is-empty) {
-        let result = (^dbus-send --print-reply=literal --dest=com.deepin.daemon.Mime /com/deepin/daemon/Mime com.deepin.daemon.Mime.GetDefaultApp string:"x-scheme-handler/http" | complete)
+        let result = (^gdbus call --session --dest com.deepin.daemon.Mime --object-path /com/deepin/daemon/Mime --method com.deepin.daemon.Mime.GetDefaultApp '"x-scheme-handler/http"' | complete)
         if ($result.exit_code) != 0 {
             exit_failure_operation_failed
         }
-        # `--print-reply=literal` emits one quoted string per indented line.
-        let id = ($result.stdout | parse --regex '"(?P<v>[^"]*)"' | get v? | get 0? | default "")
+        # gdbus prints the reply as a single-element tuple with the value in
+        # single quotes, e.g. `('name.desktop',)`.
+        let id = ($result.stdout | parse --regex "'(?P<v>[^']*)'" | get v? | get 0? | default "")
         print $id
         return
     }
