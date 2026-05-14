@@ -286,7 +286,7 @@ def --wrapped main [...args] {
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
-        let args = ($args | skip 1)
+        $args = ($args | skip 1)
 
         match $parm {
             "--noupdate" => { $update = "no" }
@@ -295,13 +295,27 @@ def --wrapped main [...args] {
                     exit_failure_syntax "mode argument missing for --mode"
                 }
                 let val = ($args | get 0)
-                let args = ($args | skip 1)
+                $args = ($args | skip 1)
                 match $val {
                     "user" => { $mode = "user" }
                     "system" => { $mode = "system" }
+                    _ => { exit_failure_syntax $"unknown mode '($val)'" }
                 }
             }
             "--novendor" => { $vendor = false }
+            _ => {
+                if ($parm | str starts-with "-") {
+                    exit_failure_syntax $"unexpected option '($parm)'"
+                }
+                if $action == "install" {
+                    check_input_file $parm
+                }
+                if ($parm | str ends-with ".directory") {
+                    $directory_files = ($directory_files | append $parm)
+                } else {
+                    $desktop_files = ($desktop_files | append $parm)
+                }
+            }
         }
     }
 

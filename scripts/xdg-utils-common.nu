@@ -9,7 +9,7 @@ export def --env DEBUG [level: int ...args] {
     }
 }
 
-export def --env handle_standard_options [tool: string, args: list<string>, help_lines: list<string>] {
+export def handle_standard_options [tool: string, args: list<any>, help_lines: list<string>] {
     if (($args | length) != 1) {
         return
     }
