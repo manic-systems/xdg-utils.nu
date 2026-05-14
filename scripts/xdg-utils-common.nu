@@ -3,8 +3,11 @@
 export const XDG_UTILS_VERSION = "1.2.1"
 
 # Debug output based on XDG_UTILS_DEBUG_LEVEL
-export def --env DEBUG [level: int ...args] {
-    if not ($env.XDG_UTILS_DEBUG_LEVEL? == null) and ($env.XDG_UTILS_DEBUG_LEVEL >= $level) {
+export def DEBUG [level: int ...args] {
+    let raw = ($env.XDG_UTILS_DEBUG_LEVEL? | default "")
+    if ($raw | is-empty) { return }
+    let current = (try { $raw | into int } catch { 0 })
+    if $current >= $level {
         print --stderr ($args | str join " ")
     }
 }
@@ -305,7 +308,9 @@ export def --env check_output_file [path: string] {
 # Set up output redirection based on debug level
 # If debug level is < 1, be silent; otherwise output to stderr
 export def --env setup_xdg_redirect [] {
-    if ($env.XDG_UTILS_DEBUG_LEVEL? == null) or ($env.XDG_UTILS_DEBUG_LEVEL < 1) {
+    let raw = ($env.XDG_UTILS_DEBUG_LEVEL? | default "")
+    let level = if ($raw | is-empty) { 0 } else { try { $raw | into int } catch { 0 } }
+    if $level < 1 {
         $env.XDG_UTILS_REDIRECT_OUTPUT = "/dev/null"
     } else {
         $env.XDG_UTILS_REDIRECT_OUTPUT = "stderr"
