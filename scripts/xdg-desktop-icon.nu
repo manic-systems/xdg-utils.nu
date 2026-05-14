@@ -117,7 +117,7 @@ def --wrapped main [...args] {
         }
     }
 
-    let basefile = ($desktop_file | path parse | get stem)
+    let basefile = ($desktop_file | path basename)
 
     DEBUG 1 $"($action) ($desktop_file) in ($desktop_dir)"
 

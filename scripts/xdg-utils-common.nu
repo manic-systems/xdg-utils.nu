@@ -123,7 +123,8 @@ export def --env desktop_file_to_binary [desktop_file: string] {
         )
     )
 
-    let desktop = ($desktop_file | path parse | get stem)
+    # Normalize to the full <name>.desktop filename used on disk
+    let desktop = if ($desktop_file | str ends-with ".desktop") { $desktop_file } else { $"($desktop_file).desktop" }
     let search_dirs = ($search | split row ":")
 
     for dir in $search_dirs {
@@ -140,8 +141,9 @@ export def --env desktop_file_to_binary [desktop_file: string] {
 
         # Check if desktop file contains vendor prefix (contains -)
         if ($desktop | str contains "-") {
-            let vendor = ($desktop | split row "-" | get 0)
-            let app = ($desktop | split row "-" | get 1)
+            let stem = ($desktop | str substring 0..(($desktop | str length) - (".desktop" | str length)))
+            let vendor = ($stem | split row "-" | get 0)
+            let app = $"($stem | split row "-" | skip 1 | str join "-").desktop"
 
             if (($dir | path join "applications" $vendor $app | path type) == "file") {
                 $file_path = ($dir | path join "applications" $vendor $app)
@@ -162,7 +164,7 @@ export def --env desktop_file_to_binary [desktop_file: string] {
             ] {
                 DEBUG 4 $"Does file exist? '($indir)/($desktop)'"
                 let test_path = ($indir | path join $desktop)
-                if (($test_path | path type) == "file" and ($test_path | path parse | get extension) == "desktop") {
+                if (($test_path | path type) == "file") {
                     $file_path = $test_path
                     $found_file_path = true
                     break
