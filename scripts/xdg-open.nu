@@ -87,7 +87,7 @@ def --env open_kde [url: string] {
 
 # Open on Deepin
 def --env open_deepin [url: string] {
-    if (^dde-open -version | complete | get exit_code) == 0 {
+    if (which dde-open | is-not-empty) {
         let result = (^dde-open $url | complete)
         if ($result.exit_code) == 0 {
             exit_success
@@ -99,9 +99,9 @@ def --env open_deepin [url: string] {
 
 # Open on GNOME 3
 def --env open_gnome3 [url: string] {
-    let result = if (^gio help open | complete | get exit_code) == 0 {
+    let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (^gvfs-open --help | complete | get exit_code) == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         (^gvfs-open $url | complete)
     } else {
         return (open_generic $url)
@@ -116,11 +116,11 @@ def --env open_gnome3 [url: string] {
 
 # Open on GNOME
 def --env open_gnome [url: string] {
-    let result = if (^gio help open | complete | get exit_code) == 0 {
+    let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (^gvfs-open --help | complete | get exit_code) == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         (^gvfs-open $url | complete)
-    } else if (^gnome-open --help | complete | get exit_code) == 0 {
+    } else if (which gnome-open | is-not-empty) {
         (^gnome-open $url | complete)
     } else {
         return (open_generic $url)
@@ -135,11 +135,11 @@ def --env open_gnome [url: string] {
 
 # Open on MATE
 def --env open_mate [url: string] {
-    let result = if (^gio help open | complete | get exit_code) == 0 {
+    let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (^gvfs-open --help | complete | get exit_code) == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         (^gvfs-open $url | complete)
-    } else if (^mate-open --help | complete | get exit_code) == 0 {
+    } else if (which mate-open | is-not-empty) {
         (^mate-open $url | complete)
     } else {
         return (open_generic $url)
@@ -154,13 +154,13 @@ def --env open_mate [url: string] {
 
 # Open on XFCE
 def --env open_xfce [url: string] {
-    let result = if (^xfce-open --help | complete | get exit_code) == 0 {
+    let result = if (which xfce-open | is-not-empty) {
         (^xfce-open $url | complete)
-    } else if (^exo-open --help | complete | get exit_code) == 0 {
+    } else if (which exo-open | is-not-empty) {
         (^exo-open $url | complete)
-    } else if (^gio help open | complete | get exit_code) == 0 {
+    } else if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (^gvfs-open --help | complete | get exit_code) == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         (^gvfs-open $url | complete)
     } else {
         return (open_generic $url)
@@ -175,7 +175,7 @@ def --env open_xfce [url: string] {
 
 # Open on Enlightenment
 def --env open_enlightenment [url: string] {
-    let result = if (^enlightenment_open --help | complete | get exit_code) == 0 {
+    let result = if (which enlightenment_open | is-not-empty) {
         (^enlightenment_open $url | complete)
     } else {
         return (open_generic $url)
@@ -737,7 +737,7 @@ def --env open_generic [url: string] {
             }
         }
 
-        if (has_display) and ((^mimeopen -v | complete | get exit_code) == 0) {
+        if (has_display) and (which mimeopen | is-not-empty) {
             let result = (^mimeopen -L -n $file | complete)
             if ($result.exit_code) == 0 {
                 exit_success
@@ -766,7 +766,7 @@ def --env open_generic [url: string] {
 
 # Open on LXDE
 def --env open_lxde [url: string] {
-    if (^pcmanfm --help | complete | get exit_code) == 0 and (is_file_url_or_path $url) {
+    if (which pcmanfm | is-not-empty) and (is_file_url_or_path $url) {
         mut file = (file_url_to_path $url)
         if not ($file | str starts-with "/") {
             $file = ([$"(pwd)" $file] | path join)
@@ -782,7 +782,7 @@ def --env open_lxde [url: string] {
 
 # Open on LXQt
 def --env open_lxqt [url: string] {
-    if (^qtxdg-mat open --help | complete | get exit_code) == 0 {
+    if (which qtxdg-mat | is-not-empty) {
         let result = (^qtxdg-mat open $url | complete)
         if ($result.exit_code) == 0 {
             exit_success

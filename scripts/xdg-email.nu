@@ -130,12 +130,14 @@ def --env open_gnome3 [mailto: string, attach: string] {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^gio help open | complete).exit_code == 0 {
+    let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (^gvfs-open --help | complete).exit_code == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         ^gvfs-open $mailto | complete
-    } else {
+    } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
+    } else {
+        exit_failure_operation_impossible $"no method available for opening '($mailto)'"
     }
 
     if ($result.exit_code) == 0 {
@@ -146,17 +148,21 @@ def --env open_gnome3 [mailto: string, attach: string] {
 
 # Open email on GNOME
 def --env open_gnome [mailto: string, attach: string] {
-    let client = (^gconftool-2 --get /desktop/gnome/url-handlers/mailto/command | complete | get stdout | split row " " | get 0?)
+    let client = if (which gconftool-2 | is-not-empty) {
+        ^gconftool-2 --get /desktop/gnome/url-handlers/mailto/command | complete | get stdout | split row " " | get 0?
+    } else { null }
     if not ($client | default "" | is-empty) and (($client | str contains "thunderbird") or ($client | str contains "icedove")) {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^gio help open | complete).exit_code == 0 {
+    let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (^gvfs-open --help | complete).exit_code == 0 {
+    } else if (which gvfs-open | is-not-empty) {
         ^gvfs-open $mailto | complete
-    } else {
+    } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
+    } else {
+        exit_failure_operation_impossible $"no method available for opening '($mailto)'"
     }
 
     if ($result.exit_code) == 0 {
@@ -167,13 +173,15 @@ def --env open_gnome [mailto: string, attach: string] {
 
 # Open email on LXQt
 def --env open_lxqt [mailto: string, attach: string] {
-    let desktop = (^qtxdg-mat def-email-client | complete | get stdout | str trim)
+    let desktop = if (which qtxdg-mat | is-not-empty) {
+        ^qtxdg-mat def-email-client | complete | get stdout | str trim
+    } else { "" }
     let client = (desktop_file_to_binary $desktop)
     if not ($client | default "" | is-empty) and (($client | str contains "thunderbird") or ($client | str contains "icedove")) {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^qtxdg-mat open --help | complete).exit_code == 0 {
+    let result = if (which qtxdg-mat | is-not-empty) {
         (^qtxdg-mat open $mailto | complete)
     } else {
         exit_failure_operation_impossible $"no method available for opening '($mailto)'"
