@@ -25,7 +25,7 @@ def get_hostname []: nothing -> string {
 # Convert file:// URL to path
 def --env file_url_to_path [file: string] {
     if ($file | str starts-with "file://") {
-        let host = (get_hostname)
+        let host = get_hostname
         mut f = $file
         $f = ($f | str replace --regex "^file://localhost" "")
         $f = ($f | str replace --regex $"^file://($host)" "")
@@ -563,49 +563,39 @@ END {
 def --env open_with_desktop_file [desktop_file: string, file: string, uri: string = ""] {
     let hostname = (get_hostname)
 
-    # Run awk script and capture output
-    let awk_cmd = $"
-awk -v\"hostname=($hostname)\" -v\"file_arg=($file)\" -v\"uri_arg=($uri)\" '($AWK_SCRIPT_OPEN_WITH_DESKTOP_FILE)' < \"($desktop_file)\""
-
-    let result = (^sh -c $awk_cmd | complete)
+    # Feed the .desktop file into awk on stdin.
+    let result = (
+        open --raw $desktop_file
+        | ^awk -v $"hostname=($hostname)" -v $"file_arg=($file)" -v $"uri_arg=($uri)" $AWK_SCRIPT_OPEN_WITH_DESKTOP_FILE
+        | complete
+    )
 
     if ($result.exit_code) != 0 {
-        # Check if awk produced error output
         if not (($result.stdout) | is-empty) and (($result.stdout) | str starts-with "err") {
             exit_failure_operation_failed
         }
     }
 
-    # Parse the null-terminated output
-    # First 4 bytes are "cmd\0" followed by null-terminated arguments
+    # The awk script writes "cmd\0<arg0>\0<arg1>\0..." on success.
     if (($result.stdout) | is-empty) {
         exit_failure_operation_failed
     }
 
     let parts = (($result.stdout) | split row "\u{0}")
-    if ($parts | length) == 0 {
-        exit_failure_operation_failed
-    }
-
-    let first = ($parts | get 0)
+    let first = ($parts | get 0? | default "")
     if $first != "cmd" {
         exit_failure_operation_failed
     }
 
-    let cmd_parts = ($parts | skip 1 | where { not ($it | is-empty) })
-    if ($cmd_parts | length) == 0 {
+    let cmd_parts = ($parts | skip 1 | where { ($in | is-not-empty) })
+    if ($cmd_parts | is-empty) {
         exit_failure_operation_failed
     }
 
     let cmd = ($cmd_parts | get 0)
     let args = ($cmd_parts | skip 1)
 
-    # Execute the command
-    let sh_script = $"exec ($cmd) " | append $args | str join ' '
-    let exec_result = (^sh -c $sh_script | complete)
-    if ($exec_result.exit_code) == 123 {
-        exit_failure_operation_failed
-    }
+    let exec_result = (^$cmd ...$args | complete)
     if ($exec_result.exit_code) != 0 {
         exit_failure_operation_failed
     }
@@ -678,10 +668,14 @@ def --env open_envvar [url: string] {
         if ($browser | is-empty) { continue }
 
         if ($browser | str contains "%s") {
-            # Substitute %s with the URL, then run with sh
-            let formatted = (^printf $browser $url | complete | get stdout)
+            # Substitute %s with the URL, then split into argv and exec directly.
+            let formatted = (^printf $browser $url | complete | get stdout | str trim)
             if ($formatted | is-empty) { continue }
-            let result = (^sh -c $formatted | complete)
+            let parts = ($formatted | split row " " | where { ($in | is-not-empty) })
+            if ($parts | is-empty) { continue }
+            let exe = ($parts | get 0)
+            let extra = ($parts | skip 1)
+            let result = (^$exe ...$extra | complete)
             if ($result.exit_code) == 0 {
                 exit_success
             }
