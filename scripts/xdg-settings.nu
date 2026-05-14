@@ -227,7 +227,9 @@ def --env read_deepin_browser [] {
         if ($result.exit_code) != 0 {
             exit_failure_operation_failed
         }
-        print ($result.stdout | ^jq -r ".Id" | complete | get stdout | str trim)
+        # `--print-reply=literal` emits one quoted string per indented line.
+        let id = ($result.stdout | parse --regex '"(?P<v>[^"]*)"' | get v? | get 0? | default "")
+        print $id
         return
     }
     print $ret

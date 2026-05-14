@@ -11,7 +11,6 @@
   gnugrep,
   gnused,
   hostname,
-  jq,
   perlPackages,
   procps,
   which,
@@ -30,7 +29,6 @@
     gnugrep
     gnused
     hostname
-    jq
     nushell
     perl-with-deps
     procps

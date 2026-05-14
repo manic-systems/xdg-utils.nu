@@ -92,10 +92,12 @@ def --env info_lxqt [filename: string] {
 
 # Query MIME type generically
 def --env info_generic [filename: string] {
-    let result = if (^mimetype --version | complete).exit_code == 0 {
+    let result = if (which mimetype | is-not-empty) {
         (^mimetype --brief --dereference $filename | complete)
+    } else if (which file | is-not-empty) {
+        (^file --brief --dereference --mime-type $filename | complete)
     } else {
-        (^/usr/bin/file --brief --dereference --mime-type $filename | complete)
+        exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
     }
 
     if ($result.exit_code) == 0 {
