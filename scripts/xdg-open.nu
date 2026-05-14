@@ -694,7 +694,13 @@ def --env open_envvar [url: string] {
                 exit_success
             }
         } else {
-            let result = (^$browser $url | complete)
+            # Split on whitespace so flags after the executable end up as their
+            # own argv entries.
+            let parts = ($browser | split row " " | where { ($in | is-not-empty) })
+            if ($parts | is-empty) { continue }
+            let exe = ($parts | get 0)
+            let extra = ($parts | skip 1)
+            let result = (^$exe ...$extra $url | complete)
             if ($result.exit_code) == 0 {
                 exit_success
             }
