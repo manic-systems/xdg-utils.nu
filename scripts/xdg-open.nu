@@ -73,14 +73,16 @@ def --env open_darwin [url: string] {
 
 # Open on KDE
 def --env open_kde [url: string] {
-    let result = if not ($env.KDE_SESSION_VERSION? == null) {
-        match $env.KDE_SESSION_VERSION {
-            "4" => { ^kde-open $url | complete }
-            "5" => { ^kde-open5 $url | complete }
-            "6" => { ^kde-open $url | complete }
-        }
-    } else {
+    let version = ($env.KDE_SESSION_VERSION? | default "")
+    let cmd = match $version {
+        "" => "kfmclient"
+        "5" => "kde-open5"
+        _ => "kde-open"
+    }
+    let result = if $cmd == "kfmclient" {
         ^kfmclient exec $url | complete
+    } else {
+        ^$cmd $url | complete
     }
 
     if ($result.exit_code) == 0 {
@@ -195,24 +197,21 @@ def --env open_enlightenment [url: string] {
 
 # Open using D-Bus portal
 def --env open_gdbus [url: string] {
-    let result = if (is_file_url_or_path $url) {
+    # Normalize local paths into file:// URIs.
+    let target = if (is_file_url_or_path $url) {
         let file = (file_url_to_path $url)
         check_input_file $file
-
-        (^gdbus call --session
-            --dest org.freedesktop.portal.Desktop
-            --object-path /org/freedesktop/portal/desktop
-            --method org.freedesktop.portal.OpenURI.OpenFile
-            --timeout 5
-            "" "3" => {} 3< $file | complete)
+        $"file://(($file | path expand))"
     } else {
-        (^gdbus call --session
-            --dest org.freedesktop.portal.Desktop
-            --object-path /org/freedesktop/portal/desktop
-            --method org.freedesktop.portal.OpenURI.OpenURI
-            --timeout 5
-            "" $url {} | complete)
+        $url
     }
+
+    let result = (^gdbus call --session
+        --dest org.freedesktop.portal.Desktop
+        --object-path /org/freedesktop/portal/desktop
+        --method org.freedesktop.portal.OpenURI.OpenURI
+        --timeout 5
+        "" $target "{}" | complete)
 
     if ($result.exit_code) == 0 {
         exit_success
@@ -627,8 +626,9 @@ awk -v\"hostname=($hostname)\" -v\"file_arg=($file)\" -v\"uri_arg=($uri)\" '($AW
 def --env search_desktop_file [default: string, dir: string, target: string, target_uri: string = ""] {
     let candidate = ($dir | path join $default)
     if not (($candidate | path type) == "file" and ($candidate | path parse | get extension) == "desktop") {
-        # try vendor/app.desktop format (replace first - with /)
-        let alt_path = ($dir | path join ($default | ^sed -r 's/-/\//') | complete | get stdout | str trim)
+        # Try vendor/app.desktop, deriving it by swapping the first `-` for a `/`.
+        let alt_name = ($default | str replace "-" "/")
+        let alt_path = ($dir | path join $alt_name)
         if (($alt_path | path type) == "file" and ($alt_path | path parse | get extension) == "desktop") {
             open_with_desktop_file $alt_path $target $target_uri
             exit_success
@@ -694,7 +694,13 @@ def --env open_envvar [url: string] {
                 exit_success
             }
         } else {
-            let result = (^$browser $url | complete)
+            # Split on whitespace so flags after the executable end up as their
+            # own argv entries.
+            let parts = ($browser | split row " " | where { ($in | is-not-empty) })
+            if ($parts | is-empty) { continue }
+            let exe = ($parts | get 0)
+            let extra = ($parts | skip 1)
+            let result = (^$exe ...$extra $url | complete)
             if ($result.exit_code) == 0 {
                 exit_success
             }
@@ -827,6 +833,7 @@ def --env open_one_argument [url: string] {
 # Synopsis: xdg-open { file | URL }
 # Synopsis: xdg-open { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-open" $args [
         "xdg-open - opens a file or URL in the user's preferred application"
         ""

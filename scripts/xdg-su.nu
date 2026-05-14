@@ -71,9 +71,9 @@ def --env su_enlightenment [user: string, cmd: string] {
     # but terminology works as a drop in replacement for xterm and has a matching theme
     if (which terminology | is-not-empty) {
         let result = if ($user | is-empty) {
-            ^terminology -g 60x5 -T $"xdg-su: ($cmd)" -e $"su -c '($cmd)'" | complete
+            ^terminology -g 60x5 -T $"xdg-su: ($cmd)" -e su -c $cmd | complete
         } else {
-            ^terminology -g 60x5 -T $"xdg-su: ($cmd)" -e $"su -c '($cmd)' '($user)'" | complete
+            ^terminology -g 60x5 -T $"xdg-su: ($cmd)" -e su -c $cmd $user | complete
         }
         if ($result.exit_code) == 0 {
             exit_success
@@ -85,9 +85,9 @@ def --env su_enlightenment [user: string, cmd: string] {
 # Generic su fallback
 def --env su_generic [user: string, cmd: string] {
     let result = if ($user | is-empty) {
-        ^xterm -geom 60x5 -T $"xdg-su: ($cmd)" -e $"su -c '($cmd)'" | complete
+        ^xterm -geom 60x5 -T $"xdg-su: ($cmd)" -e su -c $cmd | complete
     } else {
-        ^xterm -geom 60x5 -T $"xdg-su: ($cmd)" -e $"su -c '($cmd)' '($user)'" | complete
+        ^xterm -geom 60x5 -T $"xdg-su: ($cmd)" -e su -c $cmd $user | complete
     }
     if ($result.exit_code) == 0 {
         exit_success
@@ -108,6 +108,7 @@ def --env su_xfce [user: string, cmd: string] {
 # Synopsis: xdg-su [-u username] command [arguments]
 # Synopsis: xdg-su { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-su" $args [
         "xdg-su - command line tool for running a command as another user"
         ""

@@ -12,11 +12,15 @@
   gnused,
   hostname,
   jq,
+  perlPackages,
   procps,
   which,
   xdg-user-dirs,
   shared-mime-info,
+  xprop,
+  xset,
 }: let
+  perl-with-deps = perlPackages.perl.withPackages (p: [p.NetDBus p.X11Protocol]);
   runtimeDeps = [
     coreutils
     dbus
@@ -28,10 +32,13 @@
     hostname
     jq
     nushell
+    perl-with-deps
     procps
     which
     xdg-user-dirs
     shared-mime-info
+    xprop
+    xset
   ];
 in
   stdenvNoCC.mkDerivation {
@@ -110,6 +117,6 @@ in
       description = "Set of command line tools that assist applications with a variety of desktop integration tasks";
       license = lib.licenses.mit;
       maintainers = [];
-      platforms = lib.platforms.all;
+      platforms = lib.platforms.linux;
     };
   }

@@ -5,7 +5,7 @@ use xdg-utils-common.nu *
 
 # Run Thunderbird compose
 def --env run_thunderbird [thunderbird: string, mailto: string, attach: string] {
-    let mailto_clean = ($mailto | str replace --all "^mailto:" "" | str trim)
+    let mailto_clean = ($mailto | str replace --regex "^mailto:" "" | str trim)
 
     let has_query = ($mailto_clean | str starts-with "?")
 
@@ -19,12 +19,16 @@ def --env run_thunderbird [thunderbird: string, mailto: string, attach: string] 
 
     # Helper: extract values for a key, percent-decode, and join with comma
     let extract_and_decode = {|key|
-        let values = ($parts | where {|p| $p | str starts-with $key} | each {|p| $p | str replace $"^($key)" ""})
+        let key_len = ($key | str length)
+        let values = (
+            $parts
+            | where {|p| $p | str starts-with $key }
+            | each {|p| $p | str substring $key_len.. }
+        )
         if ($values | is-empty) {
             ""
         } else {
-            let decoded = ($values | each {|v| $v | url decode } | str join ",")
-            $decoded
+            $values | each {|v| $v | url decode } | str join ","
         }
     }
 
@@ -32,9 +36,9 @@ def --env run_thunderbird [thunderbird: string, mailto: string, attach: string] 
     let cc = (do $extract_and_decode "cc=")
     let bcc = (do $extract_and_decode "bcc=")
 
-    # Subject and body don't need percent-decoding for thunderbird - just extract them
-    let subject = ($parts | where {|p| $p | str starts-with "subject="} | get 0? | default "" | str replace "^subject=" "")
-    let body = ($parts | where {|p| $p | str starts-with "body="} | get 0? | default "" | str replace "^body=" "")
+    # Thunderbird doesn't want subject/body percent-decoded, only extracted.
+    let subject = ($parts | where {|p| $p | str starts-with "subject=" } | get 0? | default "" | str substring ("subject=" | str length)..)
+    let body = ($parts | where {|p| $p | str starts-with "body=" } | get 0? | default "" | str substring ("body=" | str length)..)
 
     mut newmailto = ""
     if not ($to | is-empty) {
@@ -92,12 +96,10 @@ def --env open_kde [mailto: string, attach: string] {
     }
 
     let kde_ver = ($env.KDE_SESSION_VERSION? | default "")
-    let command = if ($kde_ver | is-empty) {
-        "kmailservice"
-    } else if ($kde_ver == "4") {
-        "kde-open"
-    } else {
-        $"kde-open($kde_ver)"
+    let command = match $kde_ver {
+        "" => "kmailservice"
+        "4" => "kde-open"
+        _ => $"kde-open($kde_ver)"
     }
 
     let result = if (which $command | is-not-empty) {
@@ -210,7 +212,7 @@ def --env open_gdbus [mailto: string] {
         --dest org.freedesktop.portal.Desktop
         --object-path /org/freedesktop/portal/desktop
         --method org.freedesktop.portal.OpenURI.OpenURI
-        "" $mailto {} | complete)
+        "" $mailto "{}" | complete)
 
     if ($result.exit_code) == 0 {
         exit_success
@@ -285,6 +287,7 @@ END {
 # Synopsis: xdg-email [--utf8] [--cc address] [--bcc address] [--subject text] [--body text] [--attach file] [mailto-uri | address(es)]
 # Synopsis: xdg-email { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-email" $args [
         "xdg-email - command line tool for sending mail using the user's preferred e-mail composer"
         ""

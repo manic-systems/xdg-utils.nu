@@ -95,6 +95,42 @@ def --env terminal_xfce [command: string] {
     exit_failure_operation_failed
 }
 
+# Split a command line the way a shell would, honoring single quotes, double
+# quotes, and backslash escapes, but without performing variable expansion.
+def shell-words [s: string]: nothing -> list<string> {
+    mut out: list<string> = []
+    mut cur = ""
+    mut in_word = false
+    mut quote = ""
+    mut escape = false
+    for c in ($s | split chars) {
+        if $escape {
+            $cur = $cur + $c
+            $in_word = true
+            $escape = false
+            continue
+        }
+        if $quote == "'" {
+            if $c == "'" { $quote = "" } else { $cur = $cur + $c }
+            continue
+        }
+        if $quote == '"' {
+            if $c == '"' { $quote = "" } else if $c == "\\" { $escape = true } else { $cur = $cur + $c }
+            continue
+        }
+        if $c == "\\" { $escape = true; $in_word = true; continue }
+        if $c == "'" or $c == '"' { $quote = $c; $in_word = true; continue }
+        if $c == " " or $c == (char tab) {
+            if $in_word { $out = ($out | append $cur); $cur = ""; $in_word = false }
+            continue
+        }
+        $cur = $cur + $c
+        $in_word = true
+    }
+    if $in_word { $out = ($out | append $cur) }
+    $out
+}
+
 # Generic terminal
 def --env terminal_generic [command: string] {
     # if $TERM is a known non-command, use hard-coded fallbacks
@@ -107,14 +143,15 @@ def --env terminal_generic [command: string] {
     let terminal_exec = (which $term | get 0?.path | default "")
 
     if not ($terminal_exec | is-empty) and (is-executable $terminal_exec) {
+        # screen and urxvt want one argv entry per shell word, not the joined string.
+        let cmd_words = (shell-words $command)
         let result = if ($command | is-empty) {
             ^$terminal_exec | complete
-        # screen and urxvt won't do their own parsing of quoted arguments
         } else if $term == "screen" {
-            # screen has an incompatible meaning for -e
-            ^sh -c $"exec ($terminal_exec) ($command)" | complete
+            # screen overloads -e, so pass the command directly.
+            ^$terminal_exec ...$cmd_words | complete
         } else if ($term == "urxvt") or ($term == "rxvt-unicode") or ($term == "rxvt") {
-            ^sh -c $"exec ($terminal_exec) -e ($command)" | complete
+            ^$terminal_exec -e ...$cmd_words | complete
         } else {
             ^$terminal_exec -e $command | complete
         }
@@ -175,6 +212,7 @@ def --env terminal_enlightenment [command: string] {
 # Synopsis: xdg-terminal [command]
 # Synopsis: xdg-terminal { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-terminal" $args [
         "xdg-terminal - opens the user's preferred terminal emulator application"
         ""

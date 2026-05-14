@@ -111,12 +111,12 @@ export def --env binary_to_desktop_file [command_or_path: string] {
     }
 }
 
-# Map a .desktop file to its binary
+# Map a .desktop file to its binary. Returns the absolute path, or null.
 export def --env desktop_file_to_binary [desktop_file: string] {
     DEBUG 1 $"desktop_file_to_binary '($desktop_file)'"
     if ($desktop_file | is-empty) {
         DEBUG 2 "desktop_file_to_binary argument is empty"
-        return
+        return null
     }
 
     let search = (
@@ -187,24 +187,24 @@ export def --env desktop_file_to_binary [desktop_file: string] {
 
             if ($binary_result.exit_code) != 0 {
                 DEBUG 2 "No or empty Exec key in .desktop file. Search failed."
-                return
+                return null
             }
 
             let binary = (($binary_result.stdout) | str trim)
             if ($binary | is-empty) {
                 DEBUG 2 "No or empty Exec key in .desktop file. Search failed."
-                return
+                return null
             }
 
             DEBUG 2 $"Found command: ($binary)"
             let resolved = (xdg_which $binary)
             DEBUG 2 $"Resolved to command to file: '($resolved)'"
-            if not ($resolved | is-empty) {
-                xdg_realpath $resolved
-                return
+            if ($resolved | is-not-empty) {
+                return (xdg_realpath $resolved)
             }
         }
     }
+    null
 }
 
 # Exit with success
@@ -418,7 +418,7 @@ export def --env detectDE [] {
 # It also always returns 1 in KDE 3.4 and earlier
 # Simply return 0 in such case
 export def --env kfmclient_fix_exit_code [exit_code: int] {
-    let version_result = (^sh -c 'LC_ALL=C.UTF-8 kde-config --version' | complete)
+    let version_result = (with-env { LC_ALL: "C.UTF-8" } { ^kde-config --version } | complete)
     if ($version_result.exit_code) != 0 {
         return $exit_code
     }
@@ -487,37 +487,33 @@ export def --env xdg_realpath [path: string] {
 }
 
 # The `which` command but as a shell implementation.
-# Returns either the path of the resolved binary or nothing
-# because command -v does not always return the path of a command
-# (builtins, aliases, functions, etc.)
+# Returns either the path of the resolved binary or nothing, because
+# command -v will also happily resolve to builtins, aliases, or functions.
 export def --env xdg_which [command: string] {
-    if ($command | is-empty) { return }
+    if ($command | is-empty) { return null }
 
     if ($command | str contains "/") {
-        # We got a path containing slashes, test if it is executable
-        # and return its absolute path with symlinks resolved.
         if (is-executable $command) {
             return (xdg_realpath $command)
         }
-        return
+        return null
     }
 
-    # search PATH for command
     for p in ($env.PATH | split row ":") {
         let full_path = ($p | path join $command)
         if (is-executable $full_path) {
-            print $full_path
-            return
+            return $full_path
         }
     }
+    null
 }
 
-# Get XDG_CONFIG_HOME with fallback
-export def --env get_xdg_config_home [] {
-    # Only use XDG_CONFIG_HOME if it is an absolute path
-    if not ($env.XDG_CONFIG_HOME? == null) and ($env.XDG_CONFIG_HOME | str starts-with "/") {
-        print $env.XDG_CONFIG_HOME
+# Get XDG_CONFIG_HOME, falling back to ~/.config when it's unset or relative.
+# Non-absolute values are not portable across applications so we ignore them.
+export def get_xdg_config_home [] {
+    if ($env.XDG_CONFIG_HOME? != null) and ($env.XDG_CONFIG_HOME | str starts-with "/") {
+        $env.XDG_CONFIG_HOME
     } else {
-        print ($env.HOME | path join ".config")
+        $env.HOME | path join ".config"
     }
 }

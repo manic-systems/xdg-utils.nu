@@ -89,6 +89,7 @@ def update_icon_database [dir: string] {
 # Synopsis: xdg-icon-resource forceupdate [--theme theme] [--mode mode]
 # Synopsis: xdg-icon-resource { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-icon-resource" $args [
         "xdg-icon-resource - command line tool for (un)installing icon resources"
         ""

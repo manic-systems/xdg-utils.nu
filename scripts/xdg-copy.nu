@@ -31,6 +31,7 @@ def --env copy_gnome [source: string, dest: string] {
 # Synopsis: xdg-copy [source] [destination]
 # Synopsis: xdg-copy { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-copy" $args [
         "xdg-copy - command line tool for transferring files using desktop integration backends"
         ""

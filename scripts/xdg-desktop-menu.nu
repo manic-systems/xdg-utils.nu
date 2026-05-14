@@ -251,6 +251,7 @@ BEGIN { RS="<" }
 # Synopsis: xdg-desktop-menu forceupdate [--mode mode]
 # Synopsis: xdg-desktop-menu { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-desktop-menu" $args [
         "xdg-desktop-menu - command line tool for (un)installing desktop menu items"
         ""
