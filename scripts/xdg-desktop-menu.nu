@@ -114,7 +114,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     # Mandriva workaround
     if $action == "install" and (("/etc/mandrake-release" | path type) == "file") {
         let mandrake_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "applications-mdk-merged")
-        if not ($mandrake_xdg_dir | path type) == "dir" {
+        if ($mandrake_xdg_dir | path type) != "dir" {
             DEBUG 1 $"Mandriva Workaround: Link '($xdg_dir)' to '($mandrake_xdg_dir)'"
             mkdir ($mandrake_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $mandrake_xdg_dir }
@@ -124,7 +124,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     # Fedora Core 5 + patched KDE workaround (user mode)
     if $action == "install" and $mode == "user" and (("/etc/xdg/menus/kde-applications-merged" | path type) == "dir") {
         let kde_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "kde-applications-merged")
-        if not ($kde_xdg_dir | path type) == "dir" {
+        if ($kde_xdg_dir | path type) != "dir" {
             DEBUG 1 $"Fedora Workaround: Link '($xdg_dir)' to '($kde_xdg_dir)'"
             mkdir ($kde_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $kde_xdg_dir }

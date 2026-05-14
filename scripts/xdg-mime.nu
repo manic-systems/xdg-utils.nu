@@ -167,7 +167,7 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
 
     let default_file = ($default_dir | path join "mimeapps.list")
     ^mkdir -p ($default_dir | path dirname)
-    if not ($default_file | path type) == "file" {
+    if ($default_file | path type) != "file" {
         ^touch $default_file
     }
 
@@ -241,7 +241,7 @@ def --env make_default_generic [desktop_file: string, mimetype: string] {
     }
     DEBUG 2 $"make_default_generic ($desktop_file) ($mimetype)"
     DEBUG 1 $"Updating ($out_file)"
-    if not ($out_file | path type) == "file" {
+    if ($out_file | path type) != "file" {
         ^touch $out_file
     }
 

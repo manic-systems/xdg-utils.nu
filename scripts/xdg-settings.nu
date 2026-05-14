@@ -440,7 +440,7 @@ def --env set_browser_xfce [desktop_file: string] {
     let helper_dir = ((get_xdg_config_home) | path join "xfce4")
     ^mkdir -p $helper_dir
     let helpers_rc = ($helper_dir | path join "helpers.rc")
-    if not ($helpers_rc | path type) == "file" {
+    if ($helpers_rc | path type) != "file" {
         touch $helpers_rc
     }
 
