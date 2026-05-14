@@ -826,6 +826,7 @@ def --env open_one_argument [url: string] {
 # Synopsis: xdg-open { file | URL }
 # Synopsis: xdg-open { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-open" $args [
         "xdg-open - opens a file or URL in the user's preferred application"
         ""

@@ -287,6 +287,7 @@ END {
 # Synopsis: xdg-email [--utf8] [--cc address] [--bcc address] [--subject text] [--body text] [--attach file] [mailto-uri | address(es)]
 # Synopsis: xdg-email { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-email" $args [
         "xdg-email - command line tool for sending mail using the user's preferred e-mail composer"
         ""

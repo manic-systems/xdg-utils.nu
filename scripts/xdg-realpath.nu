@@ -24,6 +24,7 @@ export def run_realpath [path: string] {
 # Synopsis: xdg-realpath path
 # Synopsis: xdg-realpath { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-realpath" $args [
         "xdg-realpath - command line tool for resolving file paths"
         ""

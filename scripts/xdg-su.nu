@@ -108,6 +108,7 @@ def --env su_xfce [user: string, cmd: string] {
 # Synopsis: xdg-su [-u username] command [arguments]
 # Synopsis: xdg-su { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-su" $args [
         "xdg-su - command line tool for running a command as another user"
         ""

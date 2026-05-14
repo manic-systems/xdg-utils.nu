@@ -440,6 +440,7 @@ def --env xautolock_screensaver [action: string]: nothing -> int {
 # Synopsis: xdg-screensaver { activate | lock | reset | status }
 # Synopsis: xdg-screensaver { --help | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-screensaver" $args [
         "xdg-screensaver - command line tool for controlling the screensaver"
         ""

@@ -842,6 +842,7 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
 # Synopsis: xdg-settings { get | check | set } {property} [subproperty] [value]
 # Synopsis: xdg-settings { --help | --list | --manual | --version }
 def --wrapped main [...args] {
+    let args = ($args | each { into string })
     handle_standard_options "xdg-settings" $args [
         "xdg-settings - get various settings from the desktop environment"
         ""
