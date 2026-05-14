@@ -72,7 +72,7 @@ in
         [ "$(basename "$f")" = "xdg-utils-common.nu" ] && continue
         chmod +x "$f"
         wrapProgram "$f" \
-          --prefix PATH ":" ${lib.makeBinPath runtimeDeps}
+          --prefix PATH ":" "$out/bin:${lib.makeBinPath runtimeDeps}"
       done
 
       runHook postInstall
