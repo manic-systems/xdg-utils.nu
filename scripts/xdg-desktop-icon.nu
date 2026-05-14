@@ -1,0 +1,124 @@
+#!/usr/bin/env nu
+# xdg-desktop-icon - Install desktop items
+
+use xdg-utils-common.nu *
+
+def main [...args] {
+    if ($args | is-empty) {
+        exit_failure_syntax
+    }
+
+    mut action = ""
+    mut desktop_file = ""
+    mut vendor = true
+
+    let cmd = ($args | get 0)
+    let args = ($args | skip 1)
+
+    match $cmd {
+        "install" => { $action = "install" }
+        "uninstall" => { $action = "uninstall" }
+    }
+
+    if ($action | is-empty) {
+        exit_failure_syntax $"unknown command '($cmd)'"
+    }
+
+    mut args = $args
+    while not ($args | is-empty) {
+        let parm = ($args | get 0)
+        let args = ($args | skip 1)
+
+        match $parm {
+            "--novendor" => { $vendor = false }
+            _ => {
+                if not ($desktop_file | is-empty) {
+                    exit_failure_syntax $"unexpected argument '($parm)'"
+                }
+                if $action == "install" {
+                    check_input_file $parm
+                }
+                $desktop_file = $parm
+            }
+        }
+    }
+
+    if ($action | is-empty) {
+        exit_failure_syntax "command argument missing"
+    }
+
+    if ($desktop_file | is-empty) {
+        exit_failure_syntax "FILE argument missing"
+    }
+
+    let filetype = if ($desktop_file | str ends-with ".desktop") {
+        if $vendor and $action == "install" {
+            check_vendor_prefix $desktop_file
+        }
+        "desktop"
+    } else {
+        "other"
+    }
+
+    let my_umask = "077"
+    mut desktop_dir = ($env.HOME | path join "Desktop")
+    if (which xdg-user-dir | is-not-empty) {
+        $desktop_dir = (^xdg-user-dir DESKTOP | complete | get stdout | str trim)
+    }
+    let kde_ver = ($env.KDE_SESSION_VERSION? | default "")
+    mut desktop_dir_kde = if not ($kde_ver | is-empty) {
+        (^$"kde($kde_ver)-config" --userpath desktop | complete | get stdout | str trim)
+    } else {
+        ""
+    }
+    mut desktop_dir_gnome = ""
+
+    # GNOME desktop_is_home_dir check
+    let gconf_result = (^gconftool-2 -g /apps/nautilus/preferences/desktop_is_home_dir | complete)
+    if $gconf_result.exit_code == 0 and ($gconf_result.stdout | str contains "true") {
+        $desktop_dir_gnome = $env.HOME
+        # Don't create $HOME/Desktop if it doesn't exist
+        if not (($desktop_dir | path type) == "dir" and (is-writable $desktop_dir)) {
+            $desktop_dir = ""
+        }
+    }
+
+    # KDE desktop path handling
+    if not ($desktop_dir_kde | is-empty) {
+        if not (($desktop_dir_kde | path type) == "dir") {
+            ^sh -c $"umask ($my_umask) && mkdir -p '($desktop_dir_kde)'"
+        }
+        # Is the KDE desktop dir != $HOME/Desktop?
+        let kde_realpath = (xdg_realpath $desktop_dir_kde)
+        let dd_realpath = (xdg_realpath $desktop_dir)
+        if not ($kde_realpath | is-empty) and not ($dd_realpath | is-empty) and ($kde_realpath != $dd_realpath) {
+            # If so, don't create $HOME/Desktop if it doesn't exist
+            if not (($desktop_dir | path type) == "dir" and (is-writable $desktop_dir)) {
+                $desktop_dir = ""
+            }
+        } else {
+            # Same path, don't use KDE desktop separately
+            $desktop_dir_kde = ""
+        }
+    }
+
+    let basefile = ($desktop_file | path parse | get stem)
+
+    DEBUG 1 $"($action) ($desktop_file) in ($desktop_dir)"
+
+    if $action == "install" {
+        for dir in [$desktop_dir, $desktop_dir_kde, $desktop_dir_gnome] {
+            if not ($dir | is-empty) {
+                ^sh -c $"umask ($my_umask) && mkdir -p '($dir)' && cp '($desktop_file)' '($dir | path join $basefile)' && chmod u+x '($dir | path join $basefile)'"
+            }
+        }
+    } else if $action == "uninstall" {
+        for dir in [$desktop_dir, $desktop_dir_kde, $desktop_dir_gnome] {
+            if not ($dir | is-empty) {
+                rm --force ($dir | path join $basefile)
+            }
+        }
+    }
+
+    exit_success
+}
