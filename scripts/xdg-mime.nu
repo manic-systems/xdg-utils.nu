@@ -901,6 +901,7 @@ def --wrapped main [...args] {
                         exit_failure_syntax $"mimetype '($mimetype)' is not in the form 'minor/major'"
                     }
                 }
+                _ => { exit_failure_syntax $"unknown query type '($query_type)'" }
             }
         }
         "default" => {
@@ -916,6 +917,7 @@ def --wrapped main [...args] {
                 exit_failure_syntax $"malformed argument '($filename)', expected *.desktop"
             }
         }
+        _ => { exit_failure_syntax $"unknown command '($cmd)'" }
     }
 
     detectDE
