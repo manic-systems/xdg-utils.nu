@@ -840,7 +840,7 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
 # xdg-settings - get various settings from the desktop environment
 # Synopsis: xdg-settings { get | check | set } {property} [subproperty] [value]
 # Synopsis: xdg-settings { --help | --list | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-settings" $args [
         "xdg-settings - get various settings from the desktop environment"
         ""

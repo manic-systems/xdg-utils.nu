@@ -250,7 +250,7 @@ BEGIN { RS="<" }
 # Synopsis: xdg-desktop-menu uninstall [--noupdate] [--mode mode] directory-file(s) desktop-file(s)
 # Synopsis: xdg-desktop-menu forceupdate [--mode mode]
 # Synopsis: xdg-desktop-menu { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-desktop-menu" $args [
         "xdg-desktop-menu - command line tool for (un)installing desktop menu items"
         ""

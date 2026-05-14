@@ -782,7 +782,7 @@ def --env defapp_lxqt [mimetype: string] {
 # Synopsis: xdg-mime install [--mode mode] [--novendor] mimetypes-file
 # Synopsis: xdg-mime uninstall [--mode mode] mimetypes-file
 # Synopsis: xdg-mime { --help | --manual | --version }
-def main [...args] {
+def --wrapped main [...args] {
     handle_standard_options "xdg-mime" $args [
         "xdg-mime - command line tool for querying information about file type handling and adding descriptions for new file types"
         ""
