@@ -17,21 +17,18 @@ def is_file_url_or_path [url_or_path: string] {
     ($url_or_path | str starts-with "file://") or not (has_url_scheme $url_or_path)
 }
 
-# Get hostname
-def --env get_hostname [] {
-    if ($env.HOSTNAME? | default "" | is-empty) {
-        $env.HOSTNAME = (sys host | get hostname)
-    }
-    $env.HOSTNAME? | default ""
+# Get the local hostname.
+def get_hostname []: nothing -> string {
+    sys host | get hostname
 }
 
 # Convert file:// URL to path
 def --env file_url_to_path [file: string] {
-    get_hostname
     if ($file | str starts-with "file://") {
+        let host = (get_hostname)
         mut f = $file
         $f = ($f | str replace --regex "^file://localhost" "")
-        $f = ($f | str replace --regex $"^file://($env.HOSTNAME? | default '')" "")
+        $f = ($f | str replace --regex $"^file://($host)" "")
         $f = ($f | str replace --regex "^file://" "")
 
         if not ($f | str starts-with "/") {
@@ -564,7 +561,6 @@ END {
 # Open a file using a desktop file entry
 # (desktop_file, file, uri (optional))
 def --env open_with_desktop_file [desktop_file: string, file: string, uri: string = ""] {
-    get_hostname
     let hostname = (get_hostname)
 
     # Run awk script and capture output
