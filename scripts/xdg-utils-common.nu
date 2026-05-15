@@ -60,6 +60,19 @@ export def xdg_user_dir [key: string, fallback: string]: nothing -> string {
 }
 
 # Returns the first word of text (handles backslashes but not quote marks)
+# Read the calling process's effective UID directly from /proc.
+export def current_uid []: nothing -> int {
+    open --raw /proc/self/status
+    | lines
+    | where {|l| $l | str starts-with "Uid:" }
+    | get 0?
+    | default "Uid:\t0"
+    | parse --regex 'Uid:\s+(?P<u>\d+)'
+    | get u.0?
+    | default "0"
+    | into int
+}
+
 export def first_word [text: string] {
     let parts = ($text | split row " " | where {|x| not ($x | is-empty) })
     if not ($parts | is-empty) { $parts.0 } else { "" }
@@ -459,17 +472,14 @@ export def --env detectDE [] {
         }
     }
 
-    # fallback to uname output for other platforms
+    # fallback to kernel name for other platforms
     if ($env.DE? == null) {
-        let uname_result = (^uname | complete)
-        if ($uname_result.exit_code) == 0 {
-            let os = ($uname_result.stdout | str trim)
-            if ($os | str starts-with "CYGWIN") { $env.DE = "cygwin" }
-            if ($env.DE? == null) and ($os == "Darwin") { $env.DE = "darwin" }
-            if ($env.DE? == null) and ($os == "Linux") {
-                if (("/proc/version" | path type) == "file") and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
-                    $env.DE = "wsl"
-                }
+        let os = (sys host | get name)
+        if ($os | str starts-with "CYGWIN") { $env.DE = "cygwin" }
+        if ($env.DE? == null) and ($os == "Darwin") { $env.DE = "darwin" }
+        if ($env.DE? == null) and ($os == "Linux") {
+            if (("/proc/version" | path type) == "file") and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
+                $env.DE = "wsl"
             }
         }
     }

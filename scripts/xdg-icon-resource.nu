@@ -207,7 +207,7 @@ def --wrapped main [...args] {
     }
 
     if ($mode | is-empty) {
-        if (^whoami | complete | get stdout | str trim) == "root" {
+        if (current_uid) == 0 {
             $mode = "system"
         } else {
             $mode = "user"

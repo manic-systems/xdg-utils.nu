@@ -325,7 +325,7 @@ def --wrapped main [...args] {
     }
 
     if ($mode | is-empty) {
-        if ((^id -u | complete | get stdout | str trim | into int) == 0) {
+        if (current_uid) == 0 {
             $mode = "system"
         } else {
             $mode = "user"

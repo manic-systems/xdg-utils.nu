@@ -1029,12 +1029,7 @@ def --wrapped main [...args] {
         }
 
         if ($mode | is-empty) {
-            let uid_result = (^id -u | complete | get stdout | str trim | into int)
-            if $uid_result == 0 {
-                $mode = "system"
-            } else {
-                $mode = "user"
-            }
+            $mode = if (current_uid) == 0 { "system" } else { "user" }
         }
 
         check_input_file $filename
@@ -1058,12 +1053,7 @@ def --wrapped main [...args] {
         }
 
         if ($mode | is-empty) {
-            let uid_result = (^id -u | complete | get stdout | str trim | into int)
-            if $uid_result == 0 {
-                $mode = "system"
-            } else {
-                $mode = "user"
-            }
+            $mode = if (current_uid) == 0 { "system" } else { "user" }
         }
 
         uninstall_mimetypes $filename $mode
