@@ -1,8 +1,6 @@
 #!/usr/bin/env nu
 # xdg-desktop-icon - Install desktop items
-
 use xdg-utils-common.nu *
-
 # xdg-desktop-icon - command line tool for (un)installing icons to the desktop
 # Synopsis: xdg-desktop-icon install [--novendor] FILE
 # Synopsis: xdg-desktop-icon uninstall FILE
@@ -19,32 +17,25 @@ def --wrapped main [...args] {
         ""
         "xdg-desktop-icon { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut action = ""
     mut desktop_file = ""
     mut vendor = true
-
     let cmd = ($args | get 0)
     let args = ($args | skip 1)
-
     match $cmd {
         "install" => { $action = "install" }
         "uninstall" => { $action = "uninstall" }
     }
-
     if ($action | is-empty) {
         exit_failure_syntax $"unknown command '($cmd)'"
     }
-
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
         $args = ($args | skip 1)
-
         match $parm {
             "--novendor" => { $vendor = false }
             _ => {
@@ -58,15 +49,12 @@ def --wrapped main [...args] {
             }
         }
     }
-
     if ($action | is-empty) {
         exit_failure_syntax "command argument missing"
     }
-
     if ($desktop_file | is-empty) {
         exit_failure_syntax "FILE argument missing"
     }
-
     let filetype = if ($desktop_file | str ends-with ".desktop") {
         if $vendor and $action == "install" {
             check_vendor_prefix $desktop_file
@@ -75,7 +63,6 @@ def --wrapped main [...args] {
     } else {
         "other"
     }
-
     mut desktop_dir = (xdg_user_dir "DESKTOP" ($env.HOME | path join "Desktop"))
     let kde_ver = ($env.KDE_SESSION_VERSION? | default "")
     mut desktop_dir_kde = if not ($kde_ver | is-empty) {
@@ -84,7 +71,6 @@ def --wrapped main [...args] {
         ""
     }
     mut desktop_dir_gnome = ""
-
     # GNOME desktop_is_home_dir check
     let gconf_result = (^gconftool-2 -g /apps/nautilus/preferences/desktop_is_home_dir | complete)
     if $gconf_result.exit_code == 0 and ($gconf_result.stdout | str contains "true") {
@@ -94,7 +80,6 @@ def --wrapped main [...args] {
             $desktop_dir = ""
         }
     }
-
     # KDE desktop path handling
     if not ($desktop_dir_kde | is-empty) {
         if not ((is-dir $desktop_dir_kde)) {
@@ -114,11 +99,8 @@ def --wrapped main [...args] {
             $desktop_dir_kde = ""
         }
     }
-
     let basefile = ($desktop_file | path basename)
-
     DEBUG 1 $"($action) ($desktop_file) in ($desktop_dir)"
-
     if $action == "install" {
         for dir in [$desktop_dir, $desktop_dir_kde, $desktop_dir_gnome] {
             if not ($dir | is-empty) {
@@ -136,6 +118,5 @@ def --wrapped main [...args] {
             }
         }
     }
-
     exit_success
 }

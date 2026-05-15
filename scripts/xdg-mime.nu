@@ -1,8 +1,6 @@
 #!/usr/bin/env nu
 # xdg-mime - Utility to manipulate MIME related information
-
 use xdg-utils-common.nu *
-
 # Read the first value of `mimetype=...` from the [Default Applications]
 # section of a mimeapps.list file. Returns "" when not present.
 def read_mimeapps_default [path: string, mimetype: string]: nothing -> string {
@@ -25,7 +23,6 @@ def read_mimeapps_default [path: string, mimetype: string]: nothing -> string {
     }
     $found
 }
-
 # Rewrite a mimeapps.list so that the [Default Applications] entry for
 # `mimetype` becomes `application`. Inserts the section/entry when absent.
 def update_mimeapps_default_application [path: string, mimetype: string, application: string]: nothing -> string {
@@ -79,7 +76,6 @@ def update_mimeapps_default_application [path: string, mimetype: string, applica
     for _ in 0..<$pending_blanks { $out = ($out | append "") }
     ($out | str join "\n") ++ "\n"
 }
-
 # Rewrite a mimeapps.list so that `application` is the first entry under the
 # [Added Associations] section's `mimetype=...` line. Appends the section/entry
 # when absent, and dedupes the application if already present elsewhere in the
@@ -133,7 +129,6 @@ def update_mimeapps_added_association [path: string, mimetype: string, applicati
     for _ in 0..<$pending_blanks { $out = ($out | append "") }
     ($out | str join "\n") ++ "\n"
 }
-
 # Update KDE cache
 def --env update_kde_cache [] {
     DEBUG 1 "Running kbuildsycoca"
@@ -145,7 +140,6 @@ def --env update_kde_cache [] {
         ^kbuildsycoca | complete | ignore
     }
 }
-
 # Update MIME database
 def --env update_mime_database [mode: string] {
     if $mode == "user" and (has_display) {
@@ -154,7 +148,6 @@ def --env update_mime_database [mode: string] {
             update_kde_cache
         }
     }
-
     for dir in (($env.PATH | split row ":") | append "/opt/gnome/bin") {
         let updater = ($dir | path join "update-mime-database")
         if (is-executable $updater) {
@@ -164,9 +157,7 @@ def --env update_mime_database [mode: string] {
         }
     }
 }
-
 # info_* functions that print the mimetype of a given file
-
 # Query MIME type using KDE
 def --env info_kde [filename: string] {
     let version = ($env.KDE_SESSION_VERSION? | default "")
@@ -187,7 +178,6 @@ def --env info_kde [filename: string] {
     }
     exit_failure_operation_failed
 }
-
 # Query MIME type using GNOME
 def --env info_gnome [filename: string] {
     let result = if (which gio | is-not-empty) {
@@ -196,16 +186,8 @@ def --env info_gnome [filename: string] {
         exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
         ""
     }
-
     let mimetype = (
-        $result
-        | lines
-        | where { $in | str contains "standard::content-type" }
-        | get 0?
-        | default ""
-        | split row " "
-        | get 3?
-        | default ""
+        $result | lines | where { $in | str contains "standard::content-type" } | get 0? | default "" | split row " " | get 3? | default ""
     )
     if not ($mimetype | is-empty) {
         print $mimetype
@@ -213,7 +195,6 @@ def --env info_gnome [filename: string] {
     }
     exit_failure_operation_failed
 }
-
 # Query MIME type using LXQt
 def --env info_lxqt [filename: string] {
     if (^qtxdg-mat mimetype --help | complete).exit_code == 0 {
@@ -225,23 +206,12 @@ def --env info_lxqt [filename: string] {
     }
     exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
 }
-
 # Query MIME type generically using whatever's on PATH.
 def --env info_generic [filename: string] {
     if (which gio | is-not-empty) {
         let result = (^gio info --attributes=standard::content-type $filename | complete)
         if ($result.exit_code) == 0 {
-            let mime = (
-                $result.stdout
-                | lines
-                | where { $in | str contains "standard::content-type:" }
-                | get 0?
-                | default ""
-                | parse --regex 'standard::content-type:\s*(?P<m>\S+)'
-                | get m?
-                | get 0?
-                | default ""
-            )
+            let mime = ($result.stdout | lines | where { $in | str contains "standard::content-type:" } | get 0? | default "" | parse --regex 'standard::content-type:\s*(?P<m>\S+)' | get m? | get 0? | default "")
             if not ($mime | is-empty) {
                 print $mime
                 exit_success
@@ -257,9 +227,7 @@ def --env info_generic [filename: string] {
     }
     exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
 }
-
 # make_default_* functions that set a given desktop file as the handler for a given mimetype
-
 # Set default application using KDE
 def --env make_default_kde [desktop_file: string, mimetype: string] {
     # $1 is vendor-name.desktop
@@ -281,7 +249,6 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
     #
     let vendor = $desktop_file
     let version = ($env.KDE_SESSION_VERSION? | default "0" | into int)
-
     let default_dir = if $version > 4 {
         get_xdg_config_home
     } else if ($env.KDE_SESSION_VERSION? | default "") == "4" {
@@ -295,25 +262,21 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
     } else {
         ""
     }
-
     if ($default_dir | is-empty) {
         DEBUG 2 "make_default_kde: No kde runtime detected"
         return
     }
-
     let default_file = ($default_dir | path join "mimeapps.list")
     mkdir ($default_dir | path dirname)
     if (not (is-file $default_file)) {
         touch $default_file
     }
-
     if $version > 3 {
         let new_file = $"($default_file).new"
         update_mimeapps_added_association $default_file $mimetype $vendor | save --force $new_file
         mv $new_file $default_file
     }
 }
-
 # Set default application using LXQt
 def --env make_default_lxqt [desktop_file: string, mimetype: string] {
     if (^qtxdg-mat defapp --help | complete).exit_code == 0 {
@@ -324,7 +287,6 @@ def --env make_default_lxqt [desktop_file: string, mimetype: string] {
     }
     exit_failure_operation_impossible $"no method available for setting the default application for MIME type(s) of '($mimetype)'"
 }
-
 # Set default application generically
 def --env make_default_generic [desktop_file: string, mimetype: string] {
     let default_file = ((get_xdg_config_home) | path join "mimeapps.list")
@@ -338,43 +300,37 @@ def --env make_default_generic [desktop_file: string, mimetype: string] {
     if (not (is-file $out_file)) {
         touch $out_file
     }
-
     let new_file = $"($out_file).new"
     update_mimeapps_default_application $out_file $mimetype $desktop_file | save --force $new_file
     mv $new_file $out_file
 }
-
 # Extract a `name="value"` or `name='value'` attribute from an XML tag.
 def xml_attr [tag_text: string, name: string]: nothing -> string {
-    let dq = ($tag_text | parse --regex ($name + '="(?P<v>[^"]*)"') | get v? | get 0? | default "")
+    let dq = (
+        $tag_text | parse --regex ($name + '="(?P<v>[^"]*)"') | get v? | get 0? | default ""
+    )
     if not ($dq | is-empty) { return $dq }
     $tag_text | parse --regex ($name + "='(?P<v>[^']*)'") | get v? | get 0? | default ""
 }
-
 # Extract every `<mime-type type="...">` value from a shared-mime XML file.
 def --env extract_mimetypes_from_xml [filename: string]: nothing -> list<string> {
     let content = (open --raw $filename | str replace --all --regex '(?s)<!--.*?-->' '')
-    $content
-    | split row "<"
-    | each {|rec|
+    $content | split row "<" | each {|rec|
         if not ($rec | str starts-with "mime-type") { return null }
         let v = (xml_attr $rec "type")
         if ($v | is-empty) { null } else { $v }
-    }
-    | where {|x| $x != null }
+    } | where {|x| $x != null }
 }
-
 # Create KDE desktop file from XML for a specific MIME type
 def --env create_kde_desktop_from_xml [filename: string, mimetype: string, kde_dir: string] {
     let basefile = ($filename | path basename)
     let desktop_file = ($kde_dir | path join $"($mimetype).desktop")
-
     mkdir ($desktop_file | path dirname)
     let new_file = $"($desktop_file).new"
     let built = (build_kde_desktop_from_xml $filename $mimetype $basefile)
     if $built.error {
         print $built.message
-        error make { msg: "ERROR" }
+        error make {msg: "ERROR"}
     }
     if not $built.found {
         return false
@@ -383,7 +339,6 @@ def --env create_kde_desktop_from_xml [filename: string, mimetype: string, kde_d
     mv $new_file $desktop_file
     return true
 }
-
 # Walk a shared-mime XML file, collecting the bits we need to mint a KDE 3-era
 # `<mime>.desktop` for a single mimetype. Returns {found, error, message, body}.
 def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source: string]: nothing -> record {
@@ -400,12 +355,7 @@ def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source
             let t = (xml_attr $rec "type")
             if not $found and $t == $mimetype {
                 $found = true
-                $out = ($out
-                    | append "[Desktop Entry]"
-                    | append $"# Installed by xdg-mime from ($source)"
-                    | append "Type=MimeType"
-                    | append $"MimeType=($mimetype)"
-                    | append $"Icon=($icon)")
+                $out = ($out | append "[Desktop Entry]" | append $"# Installed by xdg-mime from ($source)" | append "Type=MimeType" | append $"MimeType=($mimetype)" | append $"Icon=($icon)")
             }
             continue
         }
@@ -420,7 +370,12 @@ def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source
         if ($rec | str starts-with "sub-class-of") {
             let t = (xml_attr $rec "type")
             if ($t | is-empty) {
-                return {found: $found, error: true, message: $"Error: 'type' argument missing in <($rec)", body: ""}
+                return {
+                    found: $found
+                    error: true
+                    message: $"Error: 'type' argument missing in <($rec)"
+                    body: ""
+                }
             }
             $out = ($out | append $"X-KDE-IsAlso=($t)")
             continue
@@ -428,7 +383,12 @@ def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source
         if ($rec | str starts-with "glob") {
             let p = (xml_attr $rec "pattern")
             if ($p | is-empty) {
-                return {found: $found, error: true, message: $"Error: 'pattern' argument missing in <($rec)", body: ""}
+                return {
+                    found: $found
+                    error: true
+                    message: $"Error: 'pattern' argument missing in <($rec)"
+                    body: ""
+                }
             }
             $glob_patterns = $"($glob_patterns)($p);"
             continue
@@ -437,13 +397,7 @@ def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source
             let lang = (xml_attr $rec "xml:lang")
             let gt = ($rec | str index-of ">")
             if $gt < 0 { continue }
-            let comment = (
-                $rec
-                | str substring (($gt + 1)..)
-                | str replace --all "&lt;" "<"
-                | str replace --all "&gt;" ">"
-                | str replace --all "&amp;" "&"
-            )
+            let comment = ($rec | str substring (($gt + 1)..) | str replace --all "&lt;" "<" | str replace --all "&gt;" ">" | str replace --all "&amp;" "&")
             $out = if ($lang | is-empty) {
                 $out | append $"Comment=($comment)"
             } else {
@@ -453,22 +407,30 @@ def --env build_kde_desktop_from_xml [filename: string, mimetype: string, source
         }
     }
     if not $found {
-        return {found: false, error: true, message: $"Error: mimetype '($mimetype)' not found", body: ""}
+        return {
+            found: false
+            error: true
+            message: $"Error: mimetype '($mimetype)' not found"
+            body: ""
+        }
     }
-    {found: true, error: false, message: "", body: (($out | str join "\n") ++ "\n")}
+    {
+        found: true
+        error: false
+        message: ""
+        body: (($out | str join "\n") ++ "\n")
+    }
 }
-
 # Install mimetypes from XML file
 def --env install_mimetypes [filename: string, mode: string] {
     let xdg_dir_name = "mime/packages/"
-
     # Determine user directory
-    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else { $env.HOME | path join ".local" "share" }
+    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
+        $env.HOME | path join ".local" "share"
+    }
     let xdg_user_dir = ($xdg_user_dir | path join $xdg_dir_name)
-
     # Determine system directories
     let xdg_system_dirs = if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
-
     # Find writable system directory
     mut xdg_base_dir = ""
     mut xdg_global_dir = ""
@@ -483,10 +445,8 @@ def --env install_mimetypes [filename: string, mode: string] {
             break
         }
     }
-
     DEBUG 3 $"xdg_user_dir: ($xdg_user_dir)"
     DEBUG 3 $"xdg_global_dir: ($xdg_global_dir)"
-
     # Find KDE3 mimelnk directory
     mut kde_user_dir = ""
     mut kde_global_dir = ""
@@ -507,10 +467,8 @@ def --env install_mimetypes [filename: string, mode: string] {
             }
         }
     }
-
     DEBUG 3 $"kde_user_dir: ($kde_user_dir)"
     DEBUG 3 $"kde_global_dir: ($kde_global_dir)"
-
     # TODO: Gnome legacy support
     # See http://forums.fedoraforum.org/showthread.php?t=26875
     let gnome_user_dir = ($env.HOME | path join ".gnome" "apps")
@@ -518,10 +476,8 @@ def --env install_mimetypes [filename: string, mode: string] {
     if not (is-writable $gnome_global_dir) {
         $gnome_global_dir = ""
     }
-
     DEBUG 3 $"gnome_user_dir: ($gnome_user_dir)"
     DEBUG 3 $"gnome_global_dir: ($gnome_global_dir)"
-
     # Select directories based on mode
     let dirs = if $mode == "user" {
         [$xdg_user_dir, $kde_user_dir, $gnome_user_dir]
@@ -533,9 +489,7 @@ def --env install_mimetypes [filename: string, mode: string] {
     }
     let dir = ($dirs | get 0)
     let kde_dir = ($dirs | get 1)
-
     let basefile = ($filename | path basename)
-
     # Extract mimetypes from XML if KDE directory is available
     let mimetypes = if not ($kde_dir | is-empty) {
         DEBUG 2 "KDE3 mimelnk directory found, extracting mimetypes from XML file"
@@ -543,13 +497,10 @@ def --env install_mimetypes [filename: string, mode: string] {
     } else {
         []
     }
-
     DEBUG 1 $"install mimetype in ($dir)"
-
     # Copy XML file to XDG directory
     mkdir $dir
     cp $filename ($dir | path join $basefile)
-
     # Create KDE desktop files for each mimetype
     if not ($mimetypes | is-empty) {
         for x in $mimetypes {
@@ -564,21 +515,18 @@ def --env install_mimetypes [filename: string, mode: string] {
             }
         }
     }
-
     update_mime_database $mode
 }
-
 # Uninstall mimetypes from XML file
 def --env uninstall_mimetypes [filename: string, mode: string] {
     let xdg_dir_name = "mime/packages/"
-
     # Determine user directory
-    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else { $env.HOME | path join ".local" "share" }
+    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
+        $env.HOME | path join ".local" "share"
+    }
     let xdg_user_dir = ($xdg_user_dir | path join $xdg_dir_name)
-
     # Determine system directories
     let xdg_system_dirs = if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
-
     # Find writable system directory
     mut xdg_global_dir = ""
     for x in ($xdg_system_dirs | split row ":") {
@@ -589,7 +537,6 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
             break
         }
     }
-
     # Find KDE3 mimelnk directory
     mut kde_dir = ""
     if not ($env.KDE_SESSION_VERSION? == null) {
@@ -604,24 +551,19 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
             }
         }
     }
-
     # Select directory based on mode
     let dir = if $mode == "user" {
         $xdg_user_dir
     } else {
         $xdg_global_dir
     }
-
     let basefile = ($filename | path basename)
-
     DEBUG 1 $"uninstall mimetype in ($dir)"
-
     # Remove XML file from XDG directory
     let target_file = ($dir | path join $basefile)
     if (is-file $target_file) {
         rm $target_file
     }
-
     # Extract mimetypes and remove KDE desktop files
     if not ($kde_dir | is-empty) {
         let mimetypes = (extract_mimetypes_from_xml $filename)
@@ -636,10 +578,8 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
             }
         }
     }
-
     update_mime_database $mode
 }
-
 # Search for desktop files that support a MIME type
 def --env search_desktop_file [mimetype: string, dir: string] {
     let needle = $"($mimetype);"
@@ -648,40 +588,23 @@ def --env search_desktop_file [mimetype: string, dir: string] {
         and ($f.name | path parse | get extension) == "desktop"
         and (open --raw $f.name | lines | any {|l| $l | str contains $needle })
     })
-    for f in $results {
-        print $f.name
-    }
-
-    for subdir in (ls $dir | where {|f| (is-dir $f.name) }) {
-        search_desktop_file $mimetype $subdir.name
-    }
+    for f in $results { print $f.name }
+    for subdir in (ls $dir | where {|f| (is-dir $f.name) }) { search_desktop_file $mimetype $subdir.name }
 }
-
 ## defapp_* functions that print the matching desktop file name for a given mimetype.
-
 # Query default application generically
 def --env defapp_fallback [mimetype: string] {
-    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else { $env.HOME | path join ".local" "share" }
+    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
+        $env.HOME | path join ".local" "share"
+    }
     let xdg_system_dirs = if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
-
     mut preference = -1
     mut desktop_file = ""
-
     for dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) {
         let apps_dir = ($dir | path join "applications")
         if (is-dir $apps_dir) {
             for x in (search_desktop_file $mimetype $apps_dir) {
-                let pref_text = (
-                    open --raw $x
-                    | lines
-                    | where {|l| $l | str contains "InitialPreference=" }
-                    | get 0?
-                    | default ""
-                    | split row "="
-                    | get 1?
-                    | default ""
-                    | str trim
-                )
+                let pref_text = (open --raw $x | lines | where {|l| $l | str contains "InitialPreference=" } | get 0? | default "" | split row "=" | get 1? | default "" | str trim)
                 let pref = ($pref_text | try { into int } catch { 0 })
                 DEBUG 2 $" Checking ($x)"
                 if $pref > $preference {
@@ -692,13 +615,11 @@ def --env defapp_fallback [mimetype: string] {
             }
         }
     }
-
     if not ($desktop_file | is-empty) {
         print ($desktop_file | path parse | get stem)
         exit_success
     }
 }
-
 # Check for the given mimetype in the appropriate mimeapps.list files
 # in the given directory.
 # Prints the name of the desktop file that should handle the given mimetype.
@@ -723,22 +644,16 @@ def --env check_mimeapps_list [mimetype: string, dir: string] {
         }
     }
 }
-
 # Query default application generically
 def --env defapp_generic [mimetype: string] {
     let xdg_config_home = (get_xdg_config_home)
     let xdg_config_dirs = ($env.XDG_CONFIG_DIRS? | default "/etc/xdg")
-    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else { $env.HOME | path join ".local" "share" }
+    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
+        $env.HOME | path join ".local" "share"
+    }
     let xdg_system_dirs = if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
-
-    for dir in ([$xdg_config_home] | append ($xdg_config_dirs | split row ":") | flatten) {
-        check_mimeapps_list $mimetype $dir
-    }
-
-    for dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) {
-        check_mimeapps_list $mimetype ($dir | path join "applications")
-    }
-
+    for dir in ([$xdg_config_home] | append ($xdg_config_dirs | split row ":") | flatten) { check_mimeapps_list $mimetype $dir }
+    for dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) { check_mimeapps_list $mimetype ($dir | path join "applications") }
     for base_dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) {
         for prefix in (($env.XDG_MENU_PREFIX? | default "" | split row ":") | append [""] | flatten) {
             DEBUG 2 $"Checking ($base_dir)/applications/($prefix)defaults.list and ($base_dir)/applications/($prefix)mimeinfo.cache"
@@ -747,11 +662,7 @@ def --env defapp_generic [mimetype: string] {
             if ((is-file $defaults_list) or (is-file $mimeinfo_cache)) {
                 let needle = $"($mimetype)="
                 let candidate_files = ([$defaults_list, $mimeinfo_cache] | where { (is-file $in) })
-                let matched = ($candidate_files
-                    | each {|f| open --raw $f | lines | where {|l| $l | str contains $needle } }
-                    | flatten
-                    | get 0?
-                    | default "")
+                let matched = ($candidate_files | each {|f| open --raw $f | lines | where {|l| $l | str contains $needle } } | flatten | get 0? | default "")
                 if not ($matched | is-empty) {
                     let trader_result = ($matched | split row "=" | get 1? | default "" | split row ";" | get 0? | default "")
                     if not ($trader_result | is-empty) {
@@ -762,10 +673,8 @@ def --env defapp_generic [mimetype: string] {
             }
         }
     }
-
     defapp_fallback $mimetype
 }
-
 # Query default application using KDE
 def --env defapp_kde [mimetype: string] {
     let version = ($env.KDE_SESSION_VERSION? | default "" | try { into int } catch { 0 })
@@ -776,7 +685,6 @@ def --env defapp_kde [mimetype: string] {
     } else {
         (which ktradertest | get 0?.path | default "")
     }
-
     if not ($trader | is-empty) {
         DEBUG 1 $"Running KDE trader query '($mimetype)'"
         let result = (^$trader --mimetype $mimetype --servicetype Application | complete | get stdout)
@@ -791,7 +699,6 @@ def --env defapp_kde [mimetype: string] {
     }
     defapp_generic $mimetype
 }
-
 # Query default application using LXQt
 def --env defapp_lxqt [mimetype: string] {
     if (^qtxdg-mat defapp --help | complete).exit_code == 0 {
@@ -803,7 +710,6 @@ def --env defapp_lxqt [mimetype: string] {
     }
     exit_failure_operation_impossible $"no method available for querying the default application for MIME type of '($mimetype)'"
 }
-
 # xdg-mime - command line tool for querying information about file type handling and adding descriptions for new file types
 # Synopsis: xdg-mime query { filetype FILE | default mimetype }
 # Synopsis: xdg-mime default application mimetype(s)
@@ -824,19 +730,15 @@ def --wrapped main [...args] {
         ""
         "xdg-mime { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut mode = ""
     mut action = ""
     mut filename = ""
     mut mimetype = ""
-
     let cmd = ($args | get 0)
     let args = ($args | skip 1)
-
     match $cmd {
         "install" => {
             $action = "install"
@@ -855,9 +757,9 @@ def --wrapped main [...args] {
                         "system" => { $mode = "system" }
                         _ => { exit_failure_syntax $"unknown mode '($value)'" }
                     }
-                } else if $arg == "--novendor" {
-                    # Ignored for compatibility
-                } else if not ($filename | is-empty) {
+                } else if $arg == "--novendor" { } else if not (
+                # Ignored for compatibility
+                $filename | is-empty) {
                     exit_failure_syntax $"unexpected argument '$arg'"
                 } else {
                     $filename = $arg
@@ -897,7 +799,6 @@ def --wrapped main [...args] {
             }
             let query_type = ($args | get 0)
             let args = ($args | skip 1)
-
             match $query_type {
                 "filetype" => {
                     $action = "info"
@@ -942,9 +843,7 @@ def --wrapped main [...args] {
         }
         _ => { exit_failure_syntax $"unknown command '($cmd)'" }
     }
-
     detectDE
-
     if $action == "makedefault" {
         # Skip $args.0, which is the .desktop filename already captured above.
         let mimetypes = ($args | skip 1)
@@ -957,7 +856,6 @@ def --wrapped main [...args] {
             print "To get more information run with: XDG_UTILS_DEBUG_LEVEL=4 xdg-mime makedefault …"
             exit_failure_file_missing
         }
-
         let de = ($env.DE? | default "")
         for mimetype_arg in $mimetypes {
             if ($mimetype_arg | str starts-with "-") {
@@ -971,13 +869,11 @@ def --wrapped main [...args] {
             }
             make_default_generic $filename $mimetype_arg
         }
-
         if $de == "kde" {
             update_kde_cache
         }
         exit_success
     }
-
     if $action == "info" {
         detectDE
         if ($env.DE? | default "" | is-empty) {
@@ -985,40 +881,34 @@ def --wrapped main [...args] {
                 $env.DE = "generic"
             }
         }
-
         match ($env.DE? | default "") {
             "kde" => { info_kde $filename }
             "gnome" | "cinnamon" | "lxde" | "mate" | "xfce" | "budgie" => { info_gnome $filename }
             "lxqt" => { info_lxqt $filename }
-            _ => {}
+            _ => { }
         }
         info_generic $filename
         exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
     }
-
     if $action == "defapp" {
         detectDE
         if ($env.DE? | default "") == "kde" and (($env.KDE_SESSION_VERSION? | default "0" | try { into int } catch { 0 }) < 6) {
             defapp_kde $mimetype
         }
-
         match ($env.DE? | default "") {
             "lxqt" => { defapp_lxqt $mimetype }
-            _ => {}
+            _ => { }
         }
         defapp_generic $mimetype
         exit_failure_operation_impossible $"no method available for querying default application for '($mimetype)'"
     }
-
     if $action == "install" {
         # Check if filename is provided
         if ($filename | is-empty) {
             exit_failure_syntax "mimetypes-file argument missing"
         }
-
         # Check vendor prefix
         check_vendor_prefix $filename
-
         # Determine mode
         if not ($env.XDG_UTILS_INSTALL_MODE? == null) {
             if $env.XDG_UTILS_INSTALL_MODE == "system" {
@@ -1027,22 +917,18 @@ def --wrapped main [...args] {
                 $mode = "user"
             }
         }
-
         if ($mode | is-empty) {
             $mode = if (current_uid) == 0 { "system" } else { "user" }
         }
-
         check_input_file $filename
         install_mimetypes $filename $mode
         exit_success
     }
-
     if $action == "uninstall" {
         # Check if filename is provided
         if ($filename | is-empty) {
             exit_failure_syntax "mimetypes-file argument missing"
         }
-
         # Determine mode
         if not ($env.XDG_UTILS_INSTALL_MODE? == null) {
             if $env.XDG_UTILS_INSTALL_MODE == "system" {
@@ -1051,11 +937,9 @@ def --wrapped main [...args] {
                 $mode = "user"
             }
         }
-
         if ($mode | is-empty) {
             $mode = if (current_uid) == 0 { "system" } else { "user" }
         }
-
         uninstall_mimetypes $filename $mode
         exit_success
     }

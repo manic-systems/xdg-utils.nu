@@ -1,8 +1,6 @@
 #!/usr/bin/env nu
 # xdg-su - Run command as alternate user (usually root)
-
 use xdg-utils-common.nu *
-
 # Run on KDE
 def --env su_kde [user: string, cmd: string] {
     let kdesu = if $env.KDE_SESSION_VERSION == "4" {
@@ -11,7 +9,6 @@ def --env su_kde [user: string, cmd: string] {
     } else {
         "kdesu"
     }
-
     if (which $kdesu | is-not-empty) {
         let result = if ($user | is-empty) {
             ^$kdesu -c $cmd | complete
@@ -24,7 +21,6 @@ def --env su_kde [user: string, cmd: string] {
     }
     su_generic $user $cmd
 }
-
 # Run on GNOME
 def --env su_gnome [user: string, cmd: string] {
     let gsu = if (which gnomesu | is-not-empty) {
@@ -34,7 +30,6 @@ def --env su_gnome [user: string, cmd: string] {
     } else {
         ""
     }
-
     if not ($gsu | is-empty) {
         let result = if ($user | is-empty) {
             ^$gsu -c $cmd | complete
@@ -47,7 +42,6 @@ def --env su_gnome [user: string, cmd: string] {
     }
     su_generic $user $cmd
 }
-
 # Run on LXQt
 def --env su_lxqt [user: string, cmd: string] {
     if (which lxqt-sudo | is-not-empty) {
@@ -64,7 +58,6 @@ def --env su_lxqt [user: string, cmd: string] {
     }
     su_generic $user $cmd
 }
-
 # Run on Enlightenment
 def --env su_enlightenment [user: string, cmd: string] {
     # Enlightenment doesn't have any reasonably working su/sudo graphical interface
@@ -81,7 +74,6 @@ def --env su_enlightenment [user: string, cmd: string] {
     }
     su_generic $user $cmd
 }
-
 # Generic su fallback
 def --env su_generic [user: string, cmd: string] {
     let result = if ($user | is-empty) {
@@ -94,7 +86,6 @@ def --env su_generic [user: string, cmd: string] {
     }
     exit_failure_operation_failed
 }
-
 # Run on XFCE
 def --env su_xfce [user: string, cmd: string] {
     if (which gnomesu | is-not-empty) {
@@ -103,7 +94,6 @@ def --env su_xfce [user: string, cmd: string] {
         su_generic $user $cmd
     }
 }
-
 # xdg-su - command line tool for running a command as another user
 # Synopsis: xdg-su [-u username] command [arguments]
 # Synopsis: xdg-su { --help | --manual | --version }
@@ -118,19 +108,15 @@ def --wrapped main [...args] {
         ""
         "xdg-su { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut user = ""
     mut cmd = ""
-
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
         $args = ($args | skip 1)
-
         match $parm {
             "-u" => {
                 if ($args | is-empty) {
@@ -152,18 +138,15 @@ def --wrapped main [...args] {
             }
         }
     }
-
     if ($cmd | is-empty) {
         exit_failure_syntax "command missing"
     }
-
     detectDE
     if ($env.DE? | default "" | is-empty) {
         if (which xterm | is-not-empty) {
             $env.DE = "generic"
         }
     }
-
     match ($env.DE? | default "") {
         "kde" => { su_kde $user $cmd }
         "gnome" => { su_gnome $user $cmd }
@@ -177,7 +160,6 @@ def --wrapped main [...args] {
         "lxqt" => { su_lxqt $user $cmd }
         "enlightenment" => { su_enlightenment $user $cmd }
     }
-
     if ($user | is-empty) {
         $user = "root"
     }

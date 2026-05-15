@@ -1,8 +1,6 @@
 #!/usr/bin/env nu
 # xdg-icon-resource - Install icons on Linux desktop
-
 use xdg-utils-common.nu *
-
 # Set GTK_UPDATE_ICON_CACHE to gtk-update-icon-cache executable path or
 # to "-" if not found.
 def find_gtk_update_icon_cache []: nothing -> string {
@@ -13,17 +11,14 @@ def find_gtk_update_icon_cache []: nothing -> string {
             return $updater
         }
     }
-    "-"  # "-" means not found
+    "-" # "-" means not found
 }
-
 # Start GNOME legacy workaround section
-def need_dot_icon_path []: nothing -> bool {
-  # GTK < 2.6 uses ~/.icons but not XDG_DATA_HOME/icons
-  # The availability of gtk-update-icon-cache is used as indication
-  # of whether the system is using GTK 2.6 or later
-    (find_gtk_update_icon_cache) == "-"
-}
-
+def need_dot_icon_path []: nothing -> bool { 
+# GTK < 2.6 uses ~/.icons but not XDG_DATA_HOME/icons
+# The availability of gtk-update-icon-cache is used as indication
+# of whether the system is using GTK 2.6 or later
+(find_gtk_update_icon_cache) == "-" }
 # KDE legacy: check if we need to create KDE icon paths
 def need_kde_icon_path [path: string] {
     let path = (xdg_realpath $path | str trim)
@@ -32,17 +27,19 @@ def need_kde_icon_path [path: string] {
         DEBUG 2 "need_kde_icon_path RETURN 1 (not needed, no xdg icon dir)"
         return false
     }
-
     # if kde-config not found... return false
     let kde_version = ($env.KDE_SESSION_VERSION? | default "4")
-    let kde_icon_dirs = (try { ^$"kde($kde_version)-config" --path icon | complete | get stdout } catch { "" } | split row ":" | each { |x| $x | str trim } | where { not ($in | is-empty) })
+    let kde_icon_dirs = (
+        try {
+            ^$"kde($kde_version)-config" --path icon | complete | get stdout
+        } catch { "" } | split row ":" | each { |x| $x | str trim } | where { not ($in | is-empty) }
+    )
     DEBUG 3 $"kde_icon_dirs: ($kde_icon_dirs)"
     if ($kde_icon_dirs | is-empty) {
         DEBUG 3 $"no result from kde($kde_version)-config --path icon"
         DEBUG 2 "need_kde_icon_path RETURN 1 (not needed, no kde icon path)"
         return false
     }
-
     mut needed = false
     mut kde_global_prefix = ""
     for y in $kde_icon_dirs {
@@ -68,12 +65,10 @@ def need_kde_icon_path [path: string] {
         return true
     }
 }
-
 def update_icon_database [dir: string] {
     touch ($dir | path join "xdg-utils-dummy")
     rm --force ($dir | path join "xdg-utils-dummy")
-
-   # Don't create a cache if there wan't one already
+    # Don't create a cache if there wan't one already
     if (is-file ($dir | path join "icon-theme.cache")) {
         let updater = find_gtk_update_icon_cache
         if $updater != "-" {
@@ -82,7 +77,6 @@ def update_icon_database [dir: string] {
         }
     }
 }
-
 # xdg-icon-resource - command line tool for (un)installing icon resources
 # Synopsis: xdg-icon-resource install [--noupdate] [--novendor] [--theme theme] [--context context] [--mode mode] --size size icon-file [icon-name]
 # Synopsis: xdg-icon-resource uninstall [--noupdate] [--theme theme] [--context context] [--mode mode] --size size icon-name
@@ -101,11 +95,9 @@ def --wrapped main [...args] {
         ""
         "xdg-icon-resource { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut mode = ""
     mut action = ""
     mut update = "yes"
@@ -115,21 +107,17 @@ def --wrapped main [...args] {
     mut icon_file = ""
     mut icon_name = ""
     mut vendor = true
-
     let cmd = ($args | get 0)
     let args = ($args | skip 1)
-
     match $cmd {
         "install" => { $action = "install" }
         "uninstall" => { $action = "uninstall" }
         "forceupdate" => { $action = "forceupdate" }
     }
-
     mut args = $args
     while not ($args | is-empty) {
         let parm = ($args | get 0)
         $args = ($args | skip 1)
-
         match $parm {
             "--noupdate" => { $update = "no" }
             "--mode" => {
@@ -157,7 +145,10 @@ def --wrapped main [...args] {
                 }
                 let val = ($args | get 0)
                 $args = ($args | skip 1)
-                let is_valid_size = ($val == "scalable") or (try { $val | into int; true } catch { false })
+                let is_valid_size = ($val == "scalable") or (try {
+                    $val | into int
+                    true
+                } catch { false })
                 if not $is_valid_size {
                     exit_failure_syntax "size argument must be numeric or the word 'scalable'"
                 }
@@ -194,18 +185,15 @@ def --wrapped main [...args] {
             }
         }
     }
-
     if ($action | is-empty) {
         exit_failure_syntax "command argument missing"
     }
-
     if not ($env.XDG_UTILS_INSTALL_MODE? | default "" | is-empty) {
         match $env.XDG_UTILS_INSTALL_MODE {
             "system" => { $mode = "system" }
             "user" => { $mode = "user" }
         }
     }
-
     if ($mode | is-empty) {
         if (current_uid) == 0 {
             $mode = "system"
@@ -213,7 +201,6 @@ def --wrapped main [...args] {
             $mode = "user"
         }
     }
-
     let xdg_dir_name = $"icons/($theme)"
     let xdg_user_dir = ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join $xdg_dir_name)
     let xdg_user_prefix = ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "icons")
@@ -225,13 +212,12 @@ def --wrapped main [...args] {
             break
         }
     }
-
-    let xdg_global_prefix = ($env.XDG_DATA_DIRS? | default "/usr/local/share/:/usr/share/" | split row ":" | where { not ($in | is-empty) } | get 0? | default "" | path join "icons")
-
+    let xdg_global_prefix = (
+        $env.XDG_DATA_DIRS? | default "/usr/local/share/:/usr/share/" | split row ":" | where { not ($in | is-empty) } | get 0? | default "" | path join "icons"
+    )
     mut dot_icon_dir = ""
     mut dot_base_dir = ""
     mut xdg_base_dir = if $mode == "user" { $xdg_user_dir } else { $xdg_global_dir }
-
     if $action == "forceupdate" {
         if not ($icon_file | is-empty) {
             exit_failure_syntax $"unexpected argument '($icon_file)'"
@@ -244,7 +230,6 @@ def --wrapped main [...args] {
         }
         exit_success
     }
-
     if ($icon_file | is-empty) {
         if $action == "install" {
             exit_failure_syntax "icon-file argument missing"
@@ -252,13 +237,10 @@ def --wrapped main [...args] {
             exit_failure_syntax "icon-name argument missing"
         }
     }
-
     if ($size | is-empty) {
         exit_failure_syntax "the icon size must be specified with --size"
     }
-
     let xdg_size_name = if $size == "scalable" { $size } else { $"($size)x($size)" }
-
     mut kde_dir = ""
     if $mode == "user" {
         $xdg_base_dir = $xdg_user_dir
@@ -267,7 +249,9 @@ def --wrapped main [...args] {
         # If not, install additional symlink to kdedir
         if (need_kde_icon_path $xdg_user_prefix) {
             let kde_version = ($env.KDE_SESSION_VERSION? | default "4")
-            let kde_user_icon_dir = (try { ^$"kde($kde_version)-config" --path icon | complete | get stdout | str trim } catch { "" } | split row ":" | get 0? | default "" | str trim)
+            let kde_user_icon_dir = (try {
+                ^$"kde($kde_version)-config" --path icon | complete | get stdout | str trim
+            } catch { "" } | split row ":" | get 0? | default "" | str trim)
             let kde_user_dir = ($kde_user_icon_dir | path join $theme)
             $kde_dir = ($kde_user_dir | path join $xdg_size_name | path join $context)
         }
@@ -296,16 +280,16 @@ def --wrapped main [...args] {
         # If not, install additional symlink to kdedir
         if (need_kde_icon_path $xdg_global_prefix) {
             let kde_version = ($env.KDE_SESSION_VERSION? | default "4")
-            let kde_global_icon_dir = (try { ^$"kde($kde_version)-config" --path icon | complete | get stdout | str trim } catch { "" } | split row ":" | get 0? | default "" | str trim)
+            let kde_global_icon_dir = (try {
+                ^$"kde($kde_version)-config" --path icon | complete | get stdout | str trim
+            } catch { "" } | split row ":" | get 0? | default "" | str trim)
             let kde_global_dir = ($kde_global_icon_dir | path join $theme)
             $kde_dir = ($kde_global_dir | path join $xdg_size_name | path join $context)
         }
     }
-# End KDE legacy workaround section
-
+    # End KDE legacy workaround section
     # GNOME legacy: check if context is mimetypes
     let need_gnome_mime = if $context == "mimetypes" { true } else { false }
-
     let extension = if $action == "install" {
         match ($icon_file | path parse | get extension) {
             "xpm" => { "xpm" }
@@ -314,7 +298,6 @@ def --wrapped main [...args] {
             _ => { "" }
         }
     } else { "" }
-
     if $xdg_size_name == "scalable" {
         if $extension == "png" {
             exit_failure_syntax "png icons cannot be scalable"
@@ -323,7 +306,6 @@ def --wrapped main [...args] {
             exit_failure_syntax "xpm icons cannot be scalable"
         }
     }
-
     if ($icon_name | is-empty) {
         $icon_name = ($icon_file | path parse | get stem | split row "." | get 0)
     } else {
@@ -331,17 +313,13 @@ def --wrapped main [...args] {
             exit_failure_syntax "icon name should not include an extension"
         }
     }
-
     if $vendor and $action == "install" and $context == "apps" {
         check_vendor_prefix $icon_name
     }
-
     # Compute .icon file path by replacing extension
     let icon_icon_file = ($icon_file | str replace --regex '\.[a-z]{3}$' ".icon")
     let icon_icon_name = $"($icon_name).icon"
-
     let xdg_dir = ($xdg_base_dir | path join $xdg_size_name | path join $context)
-
     DEBUG 1 $"($action) icon in ($xdg_dir)"
     if $action == "install" and (is-file $icon_icon_file) {
         DEBUG 1 $"install ($icon_icon_name) meta file in ($xdg_dir)"
@@ -355,11 +333,8 @@ def --wrapped main [...args] {
     if $action == "install" and not ($dot_icon_dir | is-empty) {
         DEBUG 1 $"($action) ~/.icons symlink (GNOME 2.8 support)"
     }
-
     let my_umask = if $mode == "user" { "077" } else { "022" }
-
     if $action == "install" {
-
         # Loop over xdg_dir and dot_icon_dir
         for icon_dir in [$xdg_dir, $dot_icon_dir] {
             if ($icon_dir | is-empty) { continue }
@@ -372,13 +347,11 @@ def --wrapped main [...args] {
                 try { ^ln -s $"($icon_name).($extension)" ($icon_dir | path join $"gnome-mime-($icon_name).($extension)") }
             }
         }
-
         # KDE symlinks for KDE 3.x compatibility
         if not ($kde_dir | is-empty) {
             mkdir $kde_dir
             try { ^ln -s $"($xdg_dir)/($icon_name).($extension)" ($kde_dir | path join $"($icon_name).($extension)") }
         }
-
     } else if $action == "uninstall" {
         # Loop over xdg_dir and dot_icon_dir
         for icon_dir in [$xdg_dir, $dot_icon_dir] {
@@ -393,7 +366,6 @@ def --wrapped main [...args] {
                 rm --force ($icon_dir | path join $"gnome-mime-($icon_name).svg")
             }
         }
-
         # KDE symlinks cleanup
         if not ($kde_dir | is-empty) {
             rm --force ($kde_dir | path join $"($icon_name).xpm")
@@ -401,10 +373,8 @@ def --wrapped main [...args] {
             rm --force ($kde_dir | path join $"($icon_name).svg")
         }
     }
-
     if $update == "yes" {
         update_icon_database $xdg_base_dir
     }
-
     exit_success
 }

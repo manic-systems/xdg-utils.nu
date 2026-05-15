@@ -1,12 +1,9 @@
 #!/usr/bin/env nu
 # xdg-realpath - Canonicalize filepaths
-
 export-env {
     $env.XDG_UTILS_ENABLE_DOUBLE_HYPEN = "y"
 }
-
 use xdg-utils-common.nu *
-
 export def run_realpath [path: string] {
     if ($path | path exists) {
         let result = xdg_realpath $path
@@ -19,7 +16,6 @@ export def run_realpath [path: string] {
     }
     0
 }
-
 # xdg-realpath - command line tool for resolving file paths
 # Synopsis: xdg-realpath path
 # Synopsis: xdg-realpath { --help | --manual | --version }
@@ -34,19 +30,15 @@ def --wrapped main [...args] {
         ""
         "xdg-realpath { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut past_double_hyphen = false
     mut exit_with_missing = false
-
     mut iter_args = $args
     while not ($iter_args | is-empty) {
         let parm = ($iter_args | get 0)
         $iter_args = ($iter_args | skip 1)
-
         if $past_double_hyphen {
             let code = (run_realpath $parm)
             if $code != 0 {
@@ -65,7 +57,6 @@ def --wrapped main [...args] {
             }
         }
     }
-
     if $exit_with_missing {
         exit 2
     }

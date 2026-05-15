@@ -1,8 +1,6 @@
 #!/usr/bin/env nu
 # xdg-screensaver - Control screensaver
-
 use xdg-utils-common.nu *
-
 # Walk /proc looking for an xss-lock invocation bound to this session.
 def xss_lock_running [xdg_sid: string]: nothing -> bool {
     if (not (is-dir $"/proc")) { return false }
@@ -10,11 +8,7 @@ def xss_lock_running [xdg_sid: string]: nothing -> bool {
     for p in $candidates {
         let cmdline_path = ($p.name | path join "cmdline")
         let argv = try {
-            open --raw $cmdline_path
-            | into binary
-            | bytes split 0x[00]
-            | each { decode }
-            | where { $in != "" }
+            open --raw $cmdline_path | into binary | bytes split 0x[00] | each { decode } | where { $in != "" }
         } catch { [] }
         if ($argv | is-empty) { continue }
         let exe = ($argv | get 0 | path basename)
@@ -28,23 +22,16 @@ def xss_lock_running [xdg_sid: string]: nothing -> bool {
     }
     false
 }
-
 # Extract a bool from a gdbus method-call reply like `(true,)` or `(false,)`.
 def parse_gdbus_bool [reply: string]: nothing -> string {
-    $reply
-    | parse --regex '\((?P<v>true|false),?\)'
-    | get v?
-    | get 0?
-    | default ""
+    $reply | parse --regex '\((?P<v>true|false),?\)' | get v? | get 0? | default ""
 }
-
 # Compute screensaver state file path
 def get_screensaver_file []: nothing -> string {
     let display = ($env.DISPLAY? | default "" | str replace --all ":" "-")
     let user = ($env.USER? | default "unknown")
     $"/tmp/xdg-screensaver-($user)-($display)"
 }
-
 def do_lockfile [screensaver_file: string] {
     let lockfile_cmd = (which lockfile | get 0?.path | default "")
     if not ($lockfile_cmd | is-empty) {
@@ -61,11 +48,7 @@ def do_lockfile [screensaver_file: string] {
         }
     }
 }
-
-def do_unlockfile [screensaver_file: string] {
-    rm --force $"($screensaver_file).lock"
-}
-
+def do_unlockfile [screensaver_file: string] { rm --force $"($screensaver_file).lock" }
 # Perform action (called from screensaver implementations for DPMS handling)
 def --env perform_action [action: string, screensaver_file: string] {
     if (which xset | is-empty) { return }
@@ -75,7 +58,6 @@ def --env perform_action [action: string, screensaver_file: string] {
             ^xset +dpms | complete | ignore
         }
     }
-
     if $action == "reset" {
         if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
             ^xset -dpms | complete | ignore
@@ -84,7 +66,6 @@ def --env perform_action [action: string, screensaver_file: string] {
         }
     }
 }
-
 # Register a window-id suspend in the marker file. On the first suspend we
 # also disable the X11 screensaver via xset; resume undoes both.
 def --env do_suspend [window_id: string, screensaver_file: string] {
@@ -96,7 +77,6 @@ def --env do_suspend [window_id: string, screensaver_file: string] {
         screensaver_xserver "suspend" $screensaver_file | ignore
     }
 }
-
 # Remove a window-id from the marker file. If the marker becomes empty,
 # re-enable the X11 screensaver and restore DPMS.
 def --env do_resume [window_id: string, screensaver_file: string] {
@@ -113,7 +93,6 @@ def --env do_resume [window_id: string, screensaver_file: string] {
         do_unlockfile $screensaver_file
     }
 }
-
 # Check window ID
 def check_window_id [window_id: string] {
     let xprop = (which xprop | get 0?.path | default "")
@@ -130,64 +109,64 @@ def check_window_id [window_id: string] {
         exit_failure_operation_failed $"Window ($window_id) does not exist"
     }
 }
-
 # Freedesktop screensaver — returns exit code int.
 # Suspend/resume are handled in main; only one-shot actions live here.
-def --env screensaver_freedesktop [action: string]: nothing -> int {
-    match $action {
-        "activate" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SetActive true | complete).exit_code }
-        "lock" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.Lock | complete).exit_code }
-        "reset" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SimulateUserActivity | complete).exit_code }
-        "status" => {
-            let raw = (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.GetActive --timeout 2 | complete)
-            let status = (parse_gdbus_bool $raw.stdout)
-            if $status == "true" {
-                print "enabled"
-            } else if $status == "false" {
-                print "disabled"
-            } else {
-                print --stderr $"ERROR: dbus org.freedesktop.ScreenSaver.GetActive returned '($status)'"
-            }
-            $raw.exit_code
+def --env screensaver_freedesktop [action: string]: nothing -> int { match $action {
+    "activate" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SetActive true | complete).exit_code }
+    "lock" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.Lock | complete).exit_code }
+    "reset" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SimulateUserActivity | complete).exit_code }
+    "status" => {
+        let raw = (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.GetActive --timeout 2 | complete)
+        let status = (parse_gdbus_bool $raw.stdout)
+        if $status == "true" {
+            print "enabled"
+        } else if $status == "false" {
+            print "disabled"
+        } else {
+            print --stderr $"ERROR: dbus org.freedesktop.ScreenSaver.GetActive returned '($status)'"
         }
-        _ => { 1 }
+        $raw.exit_code
     }
-}
-
+    _ => { 1 }
+} }
 # KDE 3 screensaver — returns exit code int
-def --env screensaver_kde3 [action: string]: nothing -> int {
-    match $action {
-        "suspend" => { (^dcop kdesktop KScreensaverIface enable false | complete).exit_code }
-        "resume" => { (^dcop kdesktop KScreensaverIface configure | complete).exit_code }
-        "activate" => { (^dcop kdesktop KScreensaverIface save | complete).exit_code }
-        "lock" => { (^dcop kdesktop KScreensaverIface lock | complete).exit_code }
-        "reset" => { (^dcop kdesktop KScreensaverIface quit | complete).exit_code }
-        "status" => {
-            let raw = (^dcop kdesktop KScreensaverIface isEnabled | complete)
-            let status = ($raw.stdout | str trim)
-            if $status == "true" {
-                print "enabled"
-            } else if $status == "false" {
-                print "disabled"
-            } else {
-                print --stderr $"ERROR: kdesktop KScreensaverIface isEnabled returned '($status)'"
-            }
-            $raw.exit_code
+def --env screensaver_kde3 [action: string]: nothing -> int { match $action {
+    "suspend" => { (^dcop kdesktop KScreensaverIface enable false | complete).exit_code }
+    "resume" => { (^dcop kdesktop KScreensaverIface configure | complete).exit_code }
+    "activate" => { (^dcop kdesktop KScreensaverIface save | complete).exit_code }
+    "lock" => { (^dcop kdesktop KScreensaverIface lock | complete).exit_code }
+    "reset" => { (^dcop kdesktop KScreensaverIface quit | complete).exit_code }
+    "status" => {
+        let raw = (^dcop kdesktop KScreensaverIface isEnabled | complete)
+        let status = ($raw.stdout | str trim)
+        if $status == "true" {
+            print "enabled"
+        } else if $status == "false" {
+            print "disabled"
+        } else {
+            print --stderr $"ERROR: kdesktop KScreensaverIface isEnabled returned '($status)'"
         }
-        _ => { 1 }
+        $raw.exit_code
     }
-}
-
+    _ => { 1 }
+} }
 # XServer screensaver timeout query
 def xset_screensaver_timeout []: nothing -> int {
     if (which xset | is-empty) { return (-1) }
     let output = (^xset q | complete | get stdout)
-    let line = ($output | lines | where { $in | str contains "timeout:" } | get 0? | default "")
+    let line = (
+        $output | lines | where { $in | str contains "timeout:" } | get 0? | default ""
+    )
     if ($line | is-empty) { return (-1) }
-    let parsed = ($line | parse --regex 'timeout:\s+(?P<n>\d+)' | get n? | get 0? | default "")
-    if ($parsed | is-empty) { -1 } else { try { $parsed | into int } catch { -1 } }
+    let parsed = (
+        $line | parse --regex 'timeout:\s+(?P<n>\d+)' | get n? | get 0? | default ""
+    )
+    if ($parsed | is-empty) { -1 } else {
+        try {
+            $parsed | into int
+        } catch { -1 }
+    }
 }
-
 def --env screensaver_xserver [action: string, screensaver_file: string]: nothing -> int {
     if (which xset | is-empty) { return 1 }
     match $action {
@@ -224,105 +203,89 @@ def --env screensaver_xserver [action: string, screensaver_file: string]: nothin
         _ => { 1 }
     }
 }
-
 # GNOME screensaver — returns exit code int.
 # Suspend/resume are handled in main.
-def --env screensaver_gnome_screensaver [action: string]: nothing -> int {
-    match $action {
-        "activate" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive true | complete).exit_code }
-        "lock" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.Lock | complete).exit_code }
-        "reset" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive false | complete).exit_code }
-        "status" => {
-            let raw = (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive --timeout 2 | complete)
-            let status = (parse_gdbus_bool $raw.stdout)
-            if $status == "true" or $status == "false" {
-                print "enabled"
-            } else {
-                print "disabled"
-            }
-            $raw.exit_code
+def --env screensaver_gnome_screensaver [action: string]: nothing -> int { match $action {
+    "activate" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive true | complete).exit_code }
+    "lock" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.Lock | complete).exit_code }
+    "reset" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive false | complete).exit_code }
+    "status" => {
+        let raw = (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive --timeout 2 | complete)
+        let status = (parse_gdbus_bool $raw.stdout)
+        if $status == "true" or $status == "false" {
+            print "enabled"
+        } else {
+            print "disabled"
         }
-        _ => { 1 }
+        $raw.exit_code
     }
-}
-
+    _ => { 1 }
+} }
 # MATE screensaver — returns exit code int.
 # Suspend nudges the screensaver once; sustained inhibition isn't supported
 # without a long-running daemon.
-def --env screensaver_mate_screensaver [action: string]: nothing -> int {
-    match $action {
-        "suspend" | "reset" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SimulateUserActivity | complete).exit_code }
-        "activate" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SetActive true | complete).exit_code }
-        "lock" => { (^mate-screensaver-command --lock | complete).exit_code }
-        "status" => {
-            let raw = (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.GetActive --timeout 2 | complete)
-            let status = (parse_gdbus_bool $raw.stdout)
-            if $status == "true" or $status == "false" { print "enabled" } else { print "disabled" }
-            $raw.exit_code
-        }
-        _ => { 1 }
+def --env screensaver_mate_screensaver [action: string]: nothing -> int { match $action {
+    "suspend" | "reset" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SimulateUserActivity | complete).exit_code }
+    "activate" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SetActive true | complete).exit_code }
+    "lock" => { (^mate-screensaver-command --lock | complete).exit_code }
+    "status" => {
+        let raw = (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.GetActive --timeout 2 | complete)
+        let status = (parse_gdbus_bool $raw.stdout)
+        if $status == "true" or $status == "false" { print "enabled" } else { print "disabled" }
+        $raw.exit_code
     }
-}
-
+    _ => { 1 }
+} }
 # Cinnamon screensaver — returns exit code int. Suspend is one-shot.
-def --env screensaver_cinnamon_screensaver [action: string]: nothing -> int {
-    match $action {
-        "suspend" | "reset" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SimulateUserActivity | complete).exit_code }
-        "activate" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SetActive true | complete).exit_code }
-        "lock" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.Lock '""' | complete).exit_code }
-        "status" => {
-            let raw = (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.GetActive --timeout 2 | complete)
-            let status = (parse_gdbus_bool $raw.stdout)
-            if $status == "true" {
-                print "enabled"
-            } else if $status == "false" {
-                print "disabled"
-            } else {
-                print --stderr $"ERROR: dbus org.cinnamon.ScreenSaver.GetActive returned '($status)'"
-            }
-            $raw.exit_code
+def --env screensaver_cinnamon_screensaver [action: string]: nothing -> int { match $action {
+    "suspend" | "reset" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SimulateUserActivity | complete).exit_code }
+    "activate" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SetActive true | complete).exit_code }
+    "lock" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.Lock '""' | complete).exit_code }
+    "status" => {
+        let raw = (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.GetActive --timeout 2 | complete)
+        let status = (parse_gdbus_bool $raw.stdout)
+        if $status == "true" {
+            print "enabled"
+        } else if $status == "false" {
+            print "disabled"
+        } else {
+            print --stderr $"ERROR: dbus org.cinnamon.ScreenSaver.GetActive returned '($status)'"
         }
-        _ => { 1 }
+        $raw.exit_code
     }
-}
-
+    _ => { 1 }
+} }
 # XScreenSaver — returns exit code int. Suspend is one-shot.
-def --env screensaver_xscreensaver [action: string, screensaver_file: string]: nothing -> int {
-    match $action {
-        "suspend" | "reset" => { (^xscreensaver-command -deactivate | complete).exit_code }
-        "activate" => { (^xscreensaver-command -activate | complete).exit_code }
-        "lock" => { (^xscreensaver-command -lock | complete).exit_code }
-        "status" => {
-            if (is-file $screensaver_file) { print "disabled" } else { print "enabled" }
-            0
-        }
-        _ => { 1 }
+def --env screensaver_xscreensaver [action: string, screensaver_file: string]: nothing -> int { match $action {
+    "suspend" | "reset" => { (^xscreensaver-command -deactivate | complete).exit_code }
+    "activate" => { (^xscreensaver-command -activate | complete).exit_code }
+    "lock" => { (^xscreensaver-command -lock | complete).exit_code }
+    "status" => {
+        if (is-file $screensaver_file) { print "disabled" } else { print "enabled" }
+        0
     }
-}
-
+    _ => { 1 }
+} }
 # xautolock — returns exit code int
-def --env xautolock_screensaver [action: string]: nothing -> int {
-    match $action {
-        "suspend" => {
-            ^xset s off | complete | ignore
-            (^xautolock -disable | complete).exit_code
-        }
-        "resume" => {
-            ^xset s default | complete | ignore
-            (^xautolock -enable | complete).exit_code
-        }
-        "activate" => { (^xautolock -enable | complete).exit_code }
-        "lock" => { (^xautolock -locknow | complete).exit_code }
-        "reset" => { (^xautolock -restart | complete).exit_code }
-        "status" => {
-            let r = (^xautolock -unlocknow | complete).exit_code
-            if $r == 0 { print "enabled" } else { print "disabled" }
-            $r
-        }
-        _ => { 1 }
+def --env xautolock_screensaver [action: string]: nothing -> int { match $action {
+    "suspend" => {
+        ^xset s off | complete | ignore
+        (^xautolock -disable | complete).exit_code
     }
-}
-
+    "resume" => {
+        ^xset s default | complete | ignore
+        (^xautolock -enable | complete).exit_code
+    }
+    "activate" => { (^xautolock -enable | complete).exit_code }
+    "lock" => { (^xautolock -locknow | complete).exit_code }
+    "reset" => { (^xautolock -restart | complete).exit_code }
+    "status" => {
+        let r = (^xautolock -unlocknow | complete).exit_code
+        if $r == 0 { print "enabled" } else { print "disabled" }
+        $r
+    }
+    _ => { 1 }
+} }
 # xdg-screensaver - command line tool for controlling the screensaver
 # Synopsis: xdg-screensaver suspend WindowID
 # Synopsis: xdg-screensaver resume WindowID
@@ -341,17 +304,13 @@ def --wrapped main [...args] {
         ""
         "xdg-screensaver { --help | --manual | --version }"
     ]
-
     if ($args | is-empty) {
         exit_failure_syntax
     }
-
     mut action = ""
     mut window_id = ""
-
     let cmd = ($args | get 0)
     let rest = ($args | skip 1)
-
     match $cmd {
         "suspend" | "resume" => {
             $action = $cmd
@@ -361,24 +320,14 @@ def --wrapped main [...args] {
             $window_id = ($rest | get 0)
             check_window_id $window_id
         }
-        "activate" | "lock" | "reset" | "status" => {
-            $action = $cmd
-        }
-        _ => {
-            exit_failure_syntax $"unknown command '($cmd)'"
-        }
+        "activate" | "lock" | "reset" | "status" => { $action = $cmd }
+        _ => { exit_failure_syntax $"unknown command '($cmd)'" }
     }
-
     detectDE
-
     let screensaver_file = get_screensaver_file
-
     # Detect screensaver implementations
     let has_gdbus = (which gdbus | is-not-empty)
-    let dbus_owner_exists = {|name|
-        (^gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner $'"($name)"' | complete).exit_code == 0
-    }
-
+    let dbus_owner_exists = {|name| (^gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner $'"($name)"' | complete).exit_code == 0 }
     # Consider "xscreensaver" a separate DE
     if (which xscreensaver-command | is-not-empty) and (^xscreensaver-command -version | complete | get stdout | str contains "XScreenSaver") {
         $env.DE = "xscreensaver"
@@ -412,13 +361,12 @@ def --wrapped main [...args] {
             $env.DE = "xss-lock_screensaver"
         }
     }
-
     # suspend/resume are DE-agnostic: track which windows have an outstanding
     # suspend in $screensaver_file and toggle the X11 screensaver on the first
     # suspend / last resume. Some DEs (KDE3, xautolock, xss-lock) keep their
     # own implementation; route those through the DE table below as before.
     let de = ($env.DE? | default "")
-    let de_specific_suspend = $de in ["kde" "xautolock_screensaver" "xss-lock_screensaver"]
+    let de_specific_suspend = $de in ["kde", "xautolock_screensaver", "xss-lock_screensaver"]
     if ($action == "suspend" or $action == "resume") and not $de_specific_suspend {
         if $action == "suspend" {
             do_suspend $window_id $screensaver_file
@@ -435,7 +383,6 @@ def --wrapped main [...args] {
         }
         exit_success
     }
-
     let result = match $de {
         "kde" => {
             if not ($env.KDE_SESSION_VERSION? == null) {
@@ -475,7 +422,6 @@ def --wrapped main [...args] {
         }
         _ => { 1 }
     }
-
     if $result == 0 {
         exit_success
     }
