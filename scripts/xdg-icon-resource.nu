@@ -52,7 +52,7 @@ def need_kde_icon_path [path: string] {
             if $x == $path {
                 $needed = true
             }
-            if (($x | path type) == "dir" and (is-writable $x)) {
+            if ((is-dir $x) and (is-writable $x)) {
                 $kde_global_prefix = $x
             }
         }
@@ -74,7 +74,7 @@ def update_icon_database [dir: string] {
     rm --force ($dir | path join "xdg-utils-dummy")
 
    # Don't create a cache if there wan't one already
-    if ($dir | path join "icon-theme.cache" | path type) == "file" {
+    if (is-file ($dir | path join "icon-theme.cache")) {
         let updater = find_gtk_update_icon_cache
         if $updater != "-" {
             DEBUG 1 $"Running ($updater) -f -t \"($dir)\""
@@ -238,7 +238,7 @@ def --wrapped main [...args] {
         }
         update_icon_database $xdg_base_dir
         if not ($dot_icon_dir | is-empty) {
-            if (($dot_icon_dir | path type) == "dir" and not ($dot_icon_dir | path type) == "symlink") {
+            if ((is-dir $dot_icon_dir) and not ($dot_icon_dir | path type) == "symlink") {
                 update_icon_database $dot_base_dir
             }
         }
@@ -278,7 +278,7 @@ def --wrapped main [...args] {
             if ($dot_icon_dir | path type) == "symlink" {
                 # Don't do anything
                 $dot_icon_dir = ""
-            } else if not (($dot_icon_dir | path type) == "dir") {
+            } else if not ((is-dir $dot_icon_dir)) {
                 # Symlink if it doesn't exist
                 try { ^ln -s ".local/share/icons" $dot_icon_dir }
                 $dot_icon_dir = ""
@@ -343,7 +343,7 @@ def --wrapped main [...args] {
     let xdg_dir = ($xdg_base_dir | path join $xdg_size_name | path join $context)
 
     DEBUG 1 $"($action) icon in ($xdg_dir)"
-    if $action == "install" and ($icon_icon_file | path type) == "file" {
+    if $action == "install" and (is-file $icon_icon_file) {
         DEBUG 1 $"install ($icon_icon_name) meta file in ($xdg_dir)"
     }
     if not ($kde_dir | is-empty) {
@@ -365,7 +365,7 @@ def --wrapped main [...args] {
             if ($icon_dir | is-empty) { continue }
             mkdir $icon_dir
             try { cp $icon_file ($icon_dir | path join $"($icon_name).($extension)") }
-            if ($icon_icon_file | path type) == "file" {
+            if (is-file $icon_icon_file) {
                 try { cp $icon_icon_file ($icon_dir | path join $icon_icon_name) }
             }
             if $need_gnome_mime {

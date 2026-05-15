@@ -39,7 +39,7 @@ export def handle_standard_options [tool: string, args: list<any>, help_lines: l
 # missing or the key isn't set.
 export def xdg_user_dir [key: string, fallback: string]: nothing -> string {
     let cfg = (get_xdg_config_home | path join "user-dirs.dirs")
-    if ($cfg | path type) != "file" { return $fallback }
+    if (not (is-file $cfg)) { return $fallback }
     let key_re = '^XDG_' + $key + '_DIR='
     let line = (
         open --raw $cfg
@@ -123,6 +123,17 @@ export def percent_decode [s: string]: nothing -> string {
     $binary | decode
 }
 
+# Symlink-resolving variants of `path type`, since the builtin reports a link
+# as "symlink" rather than the kind of thing it points to.
+export def is-file [path: string]: nothing -> bool {
+    if not ($path | path exists) { return false }
+    ($path | path expand | path type) == "file"
+}
+export def is-dir [path: string]: nothing -> bool {
+    if not ($path | path exists) { return false }
+    ($path | path expand | path type) == "dir"
+}
+
 export def is-readable [path: string]: nothing -> bool {
     if not ($path | path exists) { return false }
     try { open --raw $path | first 0 | ignore; true } catch { false }
@@ -132,16 +143,15 @@ export def is-readable [path: string]: nothing -> bool {
 # regular files, walk the mode bits and decide based on whether we own the
 # file, share its group, or fall to the "other" class.
 export def is-writable [path: string]: nothing -> bool {
-    let kind = ($path | path type)
-    if $kind == null { return false }
-    if $kind == "dir" {
+    if not ($path | path exists) { return false }
+    if (is-dir $path) {
         return (try { let f = (mktemp --tmpdir-path $path .xdg-utils-w.XXXX); rm $f; true } catch { false })
     }
     mode_allows_for_caller $path "w"
 }
 
 export def is-executable [path: string]: nothing -> bool {
-    if ($path | path type) != "file" { return false }
+    if (not (is-file $path)) { return false }
     mode_allows_for_caller $path "x"
 }
 
@@ -189,7 +199,7 @@ export def --env binary_to_desktop_file [command_or_path: string] {
 
     for dir in $search_dirs {
         if ($dir | is-empty) { continue }
-        if not ((($dir | path join "applications") | path type) == "dir") and not ((($dir | path join "applnk") | path type) == "dir") { continue }
+        if (not (is-dir ($dir | path join "applications"))) and (not (is-dir ($dir | path join "applnk"))) { continue }
 
         for file_path in (
             glob ($dir | path join "applications" "*.desktop")
@@ -197,7 +207,7 @@ export def --env binary_to_desktop_file [command_or_path: string] {
             | append (glob ($dir | path join "applnk" "*.desktop"))
             | append (glob ($dir | path join "applnk" "*" "*.desktop"))
         ) {
-            if not (($file_path | path type) == "file" and ($file_path | path parse | get extension) == "desktop") { continue }
+            if not ((is-file $file_path) and ($file_path | path parse | get extension) == "desktop") { continue }
             if not (is-readable $file_path) { continue }
 
             let file_lines = (open --raw $file_path | lines)
@@ -249,8 +259,8 @@ export def --env desktop_file_to_binary [desktop_file: string] {
         if ($dir | is-empty) { continue }
         let apps_dir = ($dir | path join "applications")
         let applnk_dir = ($dir | path join "applnk")
-        let apps_exists = ($apps_dir | path type) == "dir"
-        let applnk_exists = ($applnk_dir | path type) == "dir"
+        let apps_exists = (is-dir $apps_dir)
+        let applnk_exists = (is-dir $applnk_dir)
         if not $apps_exists and not $applnk_exists { continue }
 
         mut file_path = ($dir | path join "applications" $desktop)
@@ -262,10 +272,10 @@ export def --env desktop_file_to_binary [desktop_file: string] {
             let vendor = ($stem | split row "-" | get 0)
             let app = $"($stem | split row "-" | skip 1 | str join "-").desktop"
 
-            if (($dir | path join "applications" $vendor $app | path type) == "file") {
+            if (is-file ($dir | path join "applications" $vendor $app)) {
                 $file_path = ($dir | path join "applications" $vendor $app)
                 $found_file_path = true
-            } else if (($dir | path join "applnk" $vendor $app | path type) == "file") {
+            } else if (is-file ($dir | path join "applnk" $vendor $app)) {
                 $file_path = ($dir | path join "applnk" $vendor $app)
                 $found_file_path = true
             }
@@ -281,7 +291,7 @@ export def --env desktop_file_to_binary [desktop_file: string] {
             ] {
                 DEBUG 4 $"Does file exist? '($indir)/($desktop)'"
                 let test_path = ($indir | path join $desktop)
-                if (($test_path | path type) == "file") {
+                if ((is-file $test_path)) {
                     $file_path = $test_path
                     $found_file_path = true
                     break
@@ -386,7 +396,7 @@ export def --env exit_failure_file_permission_write [...messages] {
 
 # Check if input file exists and is readable
 export def --env check_input_file [path: string] {
-    if (($path | path type) != "file") {
+    if ((not (is-file $path))) {
         exit_failure_file_missing $"file '($path)' does not exist"
     }
     if not (is-readable $path) {
@@ -410,7 +420,7 @@ export def --env check_vendor_prefix [path: string] {
 
 # Check if output file is writable
 export def --env check_output_file [path: string] {
-    if (($path | path type) == "file") {
+    if ((is-file $path)) {
         if not (is-writable $path) {
             exit_failure_file_permission_write $"no permission to write to file '($path)'"
         }
@@ -446,7 +456,7 @@ export def --env detectDE [] {
     }
 
     # Check for toolbx first
-    if (($"/run/.toolboxenv" | path type) == "file") {
+    if ((is-file $"/run/.toolboxenv")) {
         $env.DE = "toolbx"
         return
     }
@@ -508,7 +518,7 @@ export def --env detectDE [] {
         if ($os | str starts-with "CYGWIN") { $env.DE = "cygwin" }
         if ($env.DE? == null) and ($os == "Darwin") { $env.DE = "darwin" }
         if ($env.DE? == null) and ($os == "Linux") {
-            if (("/proc/version" | path type) == "file") and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
+            if ((is-file "/proc/version")) and ((open --raw /proc/version | str contains "microsoft")) and ((which explorer.exe | is-not-empty)) {
                 $env.DE = "wsl"
             }
         }
@@ -523,7 +533,7 @@ export def --env detectDE [] {
     }
 
     # Flatpak detection
-    if (($"/.flatpak-info" | path type) == "file") {
+    if ((is-file $"/.flatpak-info")) {
         $env.DE = "flatpak"
     }
 }

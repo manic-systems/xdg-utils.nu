@@ -26,7 +26,7 @@ def --env fix_local_desktop_file [desktop_file: string, mimetype: string] {
     let apps_dir = ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "applications")
     let local_file = ($apps_dir | path join $desktop_file)
 
-    if not (($local_file | path type) == "file") {
+    if not ((is-file $local_file)) {
         return
     }
 
@@ -113,7 +113,7 @@ def --env read_kde_config [configfile: string, section: string, key: string]: no
         # fine though).
         let config_dir = (^kde4-config --path config | complete | get stdout | split row ":" | get 0)
         let config_path = ($config_dir | path join $configfile)
-        if ($config_path | path type) == "file" {
+        if (is-file $config_path) {
             let key_pattern = '^' + $key + '\[\$[^]=]*\]='
             return (
                 open --raw $config_path
@@ -404,7 +404,7 @@ def --env get_browser_xfce []: nothing -> string {
     let search_dirs = ($"($xdg_config):/etc/xdg" | split row ":")
     for dir in $search_dirs {
         let file = ($dir | path join "xfce4" "helpers.rc")
-        if ($file | path type) != "file" { continue }
+        if (not (is-file $file)) { continue }
         let webbrowser_raw = (open --raw $file | lines | where {|l| $l | str starts-with "WebBrowser=" } | get 0? | default "" | str trim)
         let webbrowser = if ($webbrowser_raw | str contains "=") {
             $webbrowser_raw | split row "=" | skip 1 | str join "=" | str trim
@@ -432,7 +432,7 @@ def --env set_browser_xfce [desktop_file: string] {
     let helper_dir = ((get_xdg_config_home) | path join "xfce4")
     mkdir $helper_dir
     let helpers_rc = ($helper_dir | path join "helpers.rc")
-    if ($helpers_rc | path type) != "file" {
+    if (not (is-file $helpers_rc)) {
         touch $helpers_rc
     }
 

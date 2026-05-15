@@ -346,7 +346,7 @@ def --wrapped main [...args] {
                 $i_args = ($i_args | skip 1)
                 check_input_file $file
                 let file_path = xdg_realpath $file
-                if ($file_path | default "" | is-empty) or not ($file_path | path type) == "file" {
+                if ($file_path | default "" | is-empty) or not (is-file $file_path) {
                     exit_failure_file_missing $"file '($file)' does not exist"
                 }
                 let val = url_encode $file_path

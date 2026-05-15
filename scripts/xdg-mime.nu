@@ -303,7 +303,7 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
 
     let default_file = ($default_dir | path join "mimeapps.list")
     mkdir ($default_dir | path dirname)
-    if ($default_file | path type) != "file" {
+    if (not (is-file $default_file)) {
         touch $default_file
     }
 
@@ -335,7 +335,7 @@ def --env make_default_generic [desktop_file: string, mimetype: string] {
     }
     DEBUG 2 $"make_default_generic ($desktop_file) ($mimetype)"
     DEBUG 1 $"Updating ($out_file)"
-    if ($out_file | path type) != "file" {
+    if (not (is-file $out_file)) {
         touch $out_file
     }
 
@@ -475,7 +475,7 @@ def --env install_mimetypes [filename: string, mode: string] {
     for x in ($xdg_system_dirs | split row ":") {
         if ($x | is-empty) { continue }
         let test_dir = ($x | path join $xdg_dir_name)
-        if (($test_dir | path type) == "dir" and (is-writable $test_dir)) {
+        if ((is-dir $test_dir) and (is-writable $test_dir)) {
             if $mode == "system" {
                 $xdg_base_dir = ($x | path join "mime")
             }
@@ -557,7 +557,7 @@ def --env install_mimetypes [filename: string, mode: string] {
             let success = (create_kde_desktop_from_xml $filename $x $kde_dir)
             if not $success {
                 let desktop_file = ($kde_dir | path join $"($x).desktop")
-                if ($desktop_file | path type) == "file" {
+                if (is-file $desktop_file) {
                     rm $desktop_file
                 }
                 exit 1
@@ -584,7 +584,7 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
     for x in ($xdg_system_dirs | split row ":") {
         if ($x | is-empty) { continue }
         let test_dir = ($x | path join $xdg_dir_name)
-        if (($test_dir | path type) == "dir" and (is-writable $test_dir)) {
+        if ((is-dir $test_dir) and (is-writable $test_dir)) {
             $xdg_global_dir = $test_dir
             break
         }
@@ -618,7 +618,7 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
 
     # Remove XML file from XDG directory
     let target_file = ($dir | path join $basefile)
-    if ($target_file | path type) == "file" {
+    if (is-file $target_file) {
         rm $target_file
     }
 
@@ -627,7 +627,7 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
         let mimetypes = (extract_mimetypes_from_xml $filename)
         for x in $mimetypes {
             let desktop_file = ($kde_dir | path join $"($x).desktop")
-            if ($desktop_file | path type) == "file" {
+            if (is-file $desktop_file) {
                 let installed_by_us = (open --raw $desktop_file | lines | any {|l| $l | str starts-with "# Installed by xdg-mime" })
                 if $installed_by_us {
                     DEBUG 1 $"Removing ($desktop_file) (KDE 3.x support)"
@@ -644,7 +644,7 @@ def --env uninstall_mimetypes [filename: string, mode: string] {
 def --env search_desktop_file [mimetype: string, dir: string] {
     let needle = $"($mimetype);"
     let results = (ls $dir | where {|f|
-        ($f.name | path type) == "file"
+        (is-file $f.name)
         and ($f.name | path parse | get extension) == "desktop"
         and (open --raw $f.name | lines | any {|l| $l | str contains $needle })
     })
@@ -652,7 +652,7 @@ def --env search_desktop_file [mimetype: string, dir: string] {
         print $f.name
     }
 
-    for subdir in (ls $dir | where {|f| ($f.name | path type) == "dir" }) {
+    for subdir in (ls $dir | where {|f| (is-dir $f.name) }) {
         search_desktop_file $mimetype $subdir.name
     }
 }
@@ -669,7 +669,7 @@ def --env defapp_fallback [mimetype: string] {
 
     for dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) {
         let apps_dir = ($dir | path join "applications")
-        if ($apps_dir | path type) == "dir" {
+        if (is-dir $apps_dir) {
             for x in (search_desktop_file $mimetype $apps_dir) {
                 let pref_text = (
                     open --raw $x
@@ -708,7 +708,7 @@ def --env check_mimeapps_list [mimetype: string, dir: string] {
     for desktop in (($env.XDG_CURRENT_DESKTOP? | default "" | split row ":") | append "") {
         let prefix = if (not ($desktop | is-empty)) { ($desktop | str downcase | str replace --all " " "-") } else { "" }
         let mimeapps_list = ($dir | path join $"($prefix)mimeapps.list")
-        if ($mimeapps_list | path type) == "file" {
+        if (is-file $mimeapps_list) {
             DEBUG 2 $"Checking ($mimeapps_list)"
             let value = (read_mimeapps_default $mimeapps_list $mimetype)
             if not ($value | is-empty) {
@@ -744,9 +744,9 @@ def --env defapp_generic [mimetype: string] {
             DEBUG 2 $"Checking ($base_dir)/applications/($prefix)defaults.list and ($base_dir)/applications/($prefix)mimeinfo.cache"
             let defaults_list = ($base_dir | path join "applications" $prefix "defaults.list")
             let mimeinfo_cache = ($base_dir | path join "applications" $prefix "mimeinfo.cache")
-            if (($defaults_list | path type) == "file" or ($mimeinfo_cache | path type) == "file") {
+            if ((is-file $defaults_list) or (is-file $mimeinfo_cache)) {
                 let needle = $"($mimetype)="
-                let candidate_files = ([$defaults_list, $mimeinfo_cache] | where { ($in | path type) == "file" })
+                let candidate_files = ([$defaults_list, $mimeinfo_cache] | where { (is-file $in) })
                 let matched = ($candidate_files
                     | each {|f| open --raw $f | lines | where {|l| $l | str contains $needle } }
                     | flatten

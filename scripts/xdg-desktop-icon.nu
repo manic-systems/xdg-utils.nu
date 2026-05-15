@@ -90,14 +90,14 @@ def --wrapped main [...args] {
     if $gconf_result.exit_code == 0 and ($gconf_result.stdout | str contains "true") {
         $desktop_dir_gnome = $env.HOME
         # Don't create $HOME/Desktop if it doesn't exist
-        if not (($desktop_dir | path type) == "dir" and (is-writable $desktop_dir)) {
+        if not ((is-dir $desktop_dir) and (is-writable $desktop_dir)) {
             $desktop_dir = ""
         }
     }
 
     # KDE desktop path handling
     if not ($desktop_dir_kde | is-empty) {
-        if not (($desktop_dir_kde | path type) == "dir") {
+        if not ((is-dir $desktop_dir_kde)) {
             mkdir $desktop_dir_kde
             ^chmod 700 $desktop_dir_kde
         }
@@ -106,7 +106,7 @@ def --wrapped main [...args] {
         let dd_realpath = (xdg_realpath $desktop_dir)
         if not ($kde_realpath | is-empty) and not ($dd_realpath | is-empty) and ($kde_realpath != $dd_realpath) {
             # If so, don't create $HOME/Desktop if it doesn't exist
-            if not (($desktop_dir | path type) == "dir" and (is-writable $desktop_dir)) {
+            if not ((is-dir $desktop_dir) and (is-writable $desktop_dir)) {
                 $desktop_dir = ""
             }
         } else {
