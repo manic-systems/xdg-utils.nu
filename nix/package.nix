@@ -5,13 +5,11 @@
   makeWrapper,
   coreutils,
   glib,
-  xset,
 }: let
   runtimeDeps = [
     coreutils
     glib.bin
     nushell
-    xset
   ];
 in
   stdenvNoCC.mkDerivation {
