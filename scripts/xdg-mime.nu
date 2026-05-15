@@ -306,15 +306,15 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
     }
 
     let default_file = ($default_dir | path join "mimeapps.list")
-    ^mkdir -p ($default_dir | path dirname)
+    mkdir ($default_dir | path dirname)
     if ($default_file | path type) != "file" {
-        ^touch $default_file
+        touch $default_file
     }
 
     if $version > 3 {
         let new_file = $"($default_file).new"
         update_mimeapps_added_association $default_file $mimetype $vendor | save --force $new_file
-        ^mv $new_file $default_file
+        mv $new_file $default_file
     }
 }
 
@@ -340,12 +340,12 @@ def --env make_default_generic [desktop_file: string, mimetype: string] {
     DEBUG 2 $"make_default_generic ($desktop_file) ($mimetype)"
     DEBUG 1 $"Updating ($out_file)"
     if ($out_file | path type) != "file" {
-        ^touch $out_file
+        touch $out_file
     }
 
     let new_file = $"($out_file).new"
     update_mimeapps_default_application $out_file $mimetype $desktop_file | save --force $new_file
-    ^mv $new_file $out_file
+    mv $new_file $out_file
 }
 
 # Extract a `name="value"` or `name='value'` attribute from an XML tag.
@@ -384,7 +384,7 @@ def --env create_kde_desktop_from_xml [filename: string, mimetype: string, kde_d
         return false
     }
     $built.body | save --force $new_file
-    ^mv $new_file $desktop_file
+    mv $new_file $desktop_file
     return true
 }
 

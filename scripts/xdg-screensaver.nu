@@ -38,25 +38,11 @@ def parse_gdbus_bool [reply: string]: nothing -> string {
     | default ""
 }
 
-# Detect whether mv supports -T (GNU mv)
-def get_mv_cmd []: nothing -> string {
-    if (^mv --help | complete | get stdout | str contains "-T") {
-        "mv -T"
-    } else {
-        "mv"
-    }
-}
-
 # Compute screensaver state file path
 def get_screensaver_file []: nothing -> string {
     let display = ($env.DISPLAY? | default "" | str replace --all ":" "-")
-    if (get_mv_cmd) == "mv -T" {
-        let user = ($env.USER? | default "unknown")
-        $"/tmp/xdg-screensaver-($user)-($display)"
-    } else {
-        let host = (sys host | get hostname)
-        $"/tmp/.xdg-screensaver-($host)-($display)"
-    }
+    let user = ($env.USER? | default "unknown")
+    $"/tmp/xdg-screensaver-($user)-($display)"
 }
 
 def do_lockfile [screensaver_file: string] {
@@ -204,7 +190,6 @@ def xset_screensaver_timeout []: nothing -> int {
 
 def --env screensaver_xserver [action: string, screensaver_file: string]: nothing -> int {
     if (which xset | is-empty) { return 1 }
-    let mv_cmd = get_mv_cmd
     match $action {
         "suspend" => {
             let timeout = xset_screensaver_timeout
@@ -440,9 +425,8 @@ def --wrapped main [...args] {
             # Save DPMS state so we can restore it on resume.
             if not ($env.DISPLAY? | default "" | is-empty) and (which xset | is-not-empty) {
                 if (^xset -q | complete | get stdout | str contains "DPMS is Enabled") {
-                    let tmpfile = (^mktemp | complete | get stdout | str trim)
-                    let mv_cmd = get_mv_cmd
-                    if $mv_cmd == "mv -T" { ^mv -T $tmpfile $"($screensaver_file).dpms" } else { ^mv $tmpfile $"($screensaver_file).dpms" }
+                    let tmpfile = (mktemp)
+                    mv $tmpfile $"($screensaver_file).dpms"
                     ^xset -dpms | complete | ignore
                 }
             }

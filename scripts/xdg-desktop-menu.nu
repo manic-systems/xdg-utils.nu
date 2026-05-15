@@ -73,7 +73,7 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
                     "[Default Applications]\n" | save --append $new_file
                 }
                 $"($MIME)=($default_app)($basefile)\n" | save --append $new_file
-                ^mv $new_file $default_file
+                mv $new_file $default_file
             }
         }
     }
@@ -111,7 +111,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
 
     if ($menu_file | is-empty) {
         mkdir $xdg_dir
-        ^touch ($xdg_dir | path join "xdg-utils-dummy.menu")
+        touch ($xdg_dir | path join "xdg-utils-dummy.menu")
         return
     }
 
@@ -144,7 +144,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     let orig_menu_file = ($xdg_dir | path join $menu_file)
     DEBUG 1 $"Updating ($orig_menu_file)"
 
-    let tmpfile = (^mktemp | complete | get stdout | str trim)
+    let tmpfile = (mktemp)
     if ($orig_menu_file | path type) == "file" {
         extract_xml_tag_contents $orig_menu_file "Filename" | save --force $tmpfile
     }
@@ -164,7 +164,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     }
 
     if $action == "uninstall" {
-        ^touch $tmpfile
+        touch $tmpfile
         for desktop_file in $desktop_files {
             $"($desktop_file | path basename)\n" | save --append $tmpfile
         }
@@ -182,7 +182,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     DEBUG 3 $"Files to list in ($menu_file): ($new_desktop_files)"
 
     if not ($new_desktop_files | is-empty) {
-        let tmpfile = (^mktemp | complete | get stdout | str trim)
+        let tmpfile = (mktemp)
         mkdir $xdg_dir
 
         let menu_header = "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n    \"http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd\">\n<Menu>\n    <Name>Applications</Name>"
@@ -217,7 +217,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
 
     # Uninstall .directory files only if no longer referenced
     if $action == "uninstall" {
-        let tmpfile = (^mktemp | complete | get stdout | str trim)
+        let tmpfile = (mktemp)
         for mf in (glob ($xdg_dir | path join "*")) {
             let referenced = (open --raw $mf | str contains "xdg-utils")
             if $referenced {

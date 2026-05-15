@@ -42,7 +42,7 @@ def --env fix_local_desktop_file [desktop_file: string, mimetype: string] {
         return
     }
 
-    let temp = (^mktemp $"($apps_dir)/($desktop_file).XXXXXX" | complete | get stdout | str trim)
+    let temp = (mktemp --tmpdir-path $apps_dir $"($desktop_file).XXXXXX")
     $all_lines | where {|l| not ($l | str starts-with "MimeType=") } | str join "\n" | save --force $temp
     let old_lines = (open --raw $local_file | lines | length)
     let new_lines = (open --raw $temp | lines | length)
@@ -82,7 +82,7 @@ def --env set_browser_mime [desktop_file: string, ...mimetype: string] {
     # Fixing the local desktop file can actually change the default browser all
     # by itself, so we fix it only after querying to find the current default.
     fix_local_desktop_file $desktop_file $mime
-    ^mkdir -p ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "applications")
+    mkdir ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "applications")
     let result = (^xdg-mime default $desktop_file $mime | complete)
     if ($result.exit_code) != 0 {
         return
@@ -451,16 +451,16 @@ def --env check_browser_xfce [desktop_file: string] {
 # Set browser on XFCE
 def --env set_browser_xfce [desktop_file: string] {
     let helper_dir = ((get_xdg_config_home) | path join "xfce4")
-    ^mkdir -p $helper_dir
+    mkdir $helper_dir
     let helpers_rc = ($helper_dir | path join "helpers.rc")
     if ($helpers_rc | path type) != "file" {
         touch $helpers_rc
     }
 
-    let temp = (^mktemp $"($helpers_rc).XXXXXX" | complete | get stdout | str trim)
+    let temp = (mktemp --tmpdir-path ($helpers_rc | path dirname) $"($helpers_rc | path basename).XXXXXX")
     open --raw $helpers_rc | lines | where {|l| not ($l | str starts-with "WebBrowser=") } | str join "\n" | save --force $temp
     # Atomically swap the filtered temp file in for the live helpers.rc.
-    ^mv $temp $helpers_rc
+    mv $temp $helpers_rc
     print --stderr "Setting browser to xfce4-web-browser.desktop to make setting effective ..."
     set_browser_generic "xfce4-web-browser.desktop"
 }

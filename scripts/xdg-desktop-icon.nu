@@ -98,7 +98,7 @@ def --wrapped main [...args] {
     # KDE desktop path handling
     if not ($desktop_dir_kde | is-empty) {
         if not (($desktop_dir_kde | path type) == "dir") {
-            ^mkdir -p $desktop_dir_kde
+            mkdir $desktop_dir_kde
             ^chmod 700 $desktop_dir_kde
         }
         # Is the KDE desktop dir != $HOME/Desktop?
@@ -123,9 +123,9 @@ def --wrapped main [...args] {
         for dir in [$desktop_dir, $desktop_dir_kde, $desktop_dir_gnome] {
             if not ($dir | is-empty) {
                 let target = ($dir | path join $basefile)
-                ^mkdir -p $dir
+                mkdir $dir
                 ^chmod 700 $dir
-                ^cp $desktop_file $target
+                cp $desktop_file $target
                 ^chmod 700 $target
             }
         }
