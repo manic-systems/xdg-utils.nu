@@ -446,11 +446,11 @@ def --env open_with_desktop_file [desktop_file: string, file: string, uri: strin
 # Handles both vendor-app.desktop and vendor/app.desktop paths
 def --env search_desktop_file [default: string, dir: string, target: string, target_uri: string = ""] {
     let candidate = ($dir | path join $default)
-    if not (($candidate | path type) == "file" and ($candidate | path parse | get extension) == "desktop") {
+    if not ((is-file $candidate) and ($candidate | path parse | get extension) == "desktop") {
         # Try vendor/app.desktop, deriving it by swapping the first `-` for a `/`.
         let alt_name = ($default | str replace "-" "/")
         let alt_path = ($dir | path join $alt_name)
-        if (($alt_path | path type) == "file" and ($alt_path | path parse | get extension) == "desktop") {
+        if ((is-file $alt_path) and ($alt_path | path parse | get extension) == "desktop") {
             open_with_desktop_file $alt_path $target $target_uri
             exit_success
         }
@@ -460,7 +460,7 @@ def --env search_desktop_file [default: string, dir: string, target: string, tar
     }
 
     for d in (ls $dir) {
-        if ($d.name | path type) == "dir" {
+        if (is-dir $d.name) {
             search_desktop_file $default $d.name $target $target_uri
         }
     }
@@ -478,7 +478,7 @@ def --env open_generic_xdg_mime [file: string, filetype: string, url: string = "
 
     for dir in $search_dirs {
         let app_dir = ($dir | path join "applications")
-        if ($app_dir | path type) == "dir" {
+        if (is-dir $app_dir) {
             search_desktop_file $default_app $app_dir $file $url
         }
     }

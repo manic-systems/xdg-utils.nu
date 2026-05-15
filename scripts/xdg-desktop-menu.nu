@@ -47,7 +47,7 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
             DEBUG 2 $"Checking ($x)/applications/defaults.list"
             let defaults_path = ($x | path join "applications" "defaults.list")
             let needle = $"($MIME)="
-            let match = if ($defaults_path | path type) == "file" {
+            let match = if (is-file $defaults_path) {
                 open --raw $defaults_path | lines | where {|l| $l | str contains $needle } | get 0? | default ""
             } else { "" }
             let entry = if ($match | is-empty) { "" } else {
@@ -63,7 +63,7 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
         DEBUG 2 $"Current default apps for ($MIME): ($default_app)"
         if not ($default_app | str contains $basefile) {
             let default_file = (xdg_realpath ($dir | path join "defaults.list"))
-            if not ($default_file | is-empty) and ($default_file | path type) == "file" {
+            if not ($default_file | is-empty) and (is-file $default_file) {
                 DEBUG 1 $"Updating ($default_file)"
                 let new_file = $"($default_file).new"
                 let needle = $"($MIME)="
@@ -116,9 +116,9 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     }
 
     # Mandriva workaround
-    if $action == "install" and (("/etc/mandrake-release" | path type) == "file") {
+    if $action == "install" and ((is-file "/etc/mandrake-release")) {
         let mandrake_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "applications-mdk-merged")
-        if ($mandrake_xdg_dir | path type) != "dir" {
+        if (not (is-dir $mandrake_xdg_dir)) {
             DEBUG 1 $"Mandriva Workaround: Link '($xdg_dir)' to '($mandrake_xdg_dir)'"
             mkdir ($mandrake_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $mandrake_xdg_dir }
@@ -126,9 +126,9 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     }
 
     # Fedora Core 5 + patched KDE workaround (user mode)
-    if $action == "install" and $mode == "user" and (("/etc/xdg/menus/kde-applications-merged" | path type) == "dir") {
+    if $action == "install" and $mode == "user" and ((is-dir "/etc/xdg/menus/kde-applications-merged")) {
         let kde_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "kde-applications-merged")
-        if ($kde_xdg_dir | path type) != "dir" {
+        if (not (is-dir $kde_xdg_dir)) {
             DEBUG 1 $"Fedora Workaround: Link '($xdg_dir)' to '($kde_xdg_dir)'"
             mkdir ($kde_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $kde_xdg_dir }
@@ -136,7 +136,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     }
 
     # Kubuntu 6.06 workaround (system mode)
-    if $action == "install" and $mode == "system" and (("/etc/xdg/menus/kde-applications-merged" | path type) == "dir") and not (("/etc/xdg/menus/applications-merged" | path type) == "dir") {
+    if $action == "install" and $mode == "system" and ((is-dir "/etc/xdg/menus/kde-applications-merged")) and not ((is-dir "/etc/xdg/menus/applications-merged")) {
         DEBUG 1 $"Kubuntu Workaround: Link '($xdg_dir)' to 'kde-applications-merged'"
         try { ^ln -s "kde-applications-merged" $xdg_dir }
     }
@@ -145,7 +145,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     DEBUG 1 $"Updating ($orig_menu_file)"
 
     let tmpfile = (mktemp)
-    if ($orig_menu_file | path type) == "file" {
+    if (is-file $orig_menu_file) {
         extract_xml_tag_contents $orig_menu_file "Filename" | save --force $tmpfile
     }
 
@@ -459,7 +459,7 @@ def --wrapped main [...args] {
                 try { cp $desktop_file ($kde_dir | path join $basefile) }
             }
 
-            if not ($kde_dir | is-empty) and ($kde_dir | path join $basefile | path type) == "file" {
+            if not ($kde_dir | is-empty) and (is-file ($kde_dir | path join $basefile)) {
                 $"OnlyShowIn=Old;\n" | save --append ($kde_dir | path join $basefile)
             }
             make_lazy_default $xdg_dir2 $basefile $mode

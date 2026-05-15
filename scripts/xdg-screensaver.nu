@@ -5,7 +5,7 @@ use xdg-utils-common.nu *
 
 # Walk /proc looking for an xss-lock invocation bound to this session.
 def xss_lock_running [xdg_sid: string]: nothing -> bool {
-    if ($"/proc" | path type) != "dir" { return false }
+    if (not (is-dir $"/proc")) { return false }
     let candidates = (ls /proc | where {|f| ($f.name | path basename) =~ '^\d+$' })
     for p in $candidates {
         let cmdline_path = ($p.name | path join "cmdline")
@@ -70,7 +70,7 @@ def do_unlockfile [screensaver_file: string] {
 def --env perform_action [action: string, screensaver_file: string] {
     if (which xset | is-empty) { return }
     if $action == "resume" {
-        if ($"($screensaver_file).dpms" | path type) == "file" {
+        if (is-file $"($screensaver_file).dpms") {
             rm --force $"($screensaver_file).dpms"
             ^xset +dpms | complete | ignore
         }
@@ -199,7 +199,7 @@ def --env screensaver_xserver [action: string, screensaver_file: string]: nothin
             } else { 0 }
         }
         "resume" => {
-            if ($"($screensaver_file).xset" | path type) == "file" {
+            if (is-file $"($screensaver_file).xset") {
                 let value = (open --raw $"($screensaver_file).xset" | str trim)
                 let r = (^xset s $value | complete).exit_code
                 rm --force $"($screensaver_file).xset"
@@ -293,7 +293,7 @@ def --env screensaver_xscreensaver [action: string, screensaver_file: string]: n
         "activate" => { (^xscreensaver-command -activate | complete).exit_code }
         "lock" => { (^xscreensaver-command -lock | complete).exit_code }
         "status" => {
-            if ($screensaver_file | path type) == "file" { print "disabled" } else { print "enabled" }
+            if (is-file $screensaver_file) { print "disabled" } else { print "enabled" }
             0
         }
         _ => { 1 }
