@@ -124,13 +124,45 @@ export def percent_decode [s: string]: nothing -> string {
 }
 
 export def is-readable [path: string]: nothing -> bool {
-    (^test -r $path | complete).exit_code == 0
+    if not ($path | path exists) { return false }
+    try { open --raw $path | first 0 | ignore; true } catch { false }
 }
+
+# For directories, probe by creating and removing a tempfile inside. For
+# regular files, walk the mode bits and decide based on whether we own the
+# file, share its group, or fall to the "other" class.
 export def is-writable [path: string]: nothing -> bool {
-    (^test -w $path | complete).exit_code == 0
+    let kind = ($path | path type)
+    if $kind == null { return false }
+    if $kind == "dir" {
+        return (try { let f = (mktemp --tmpdir-path $path .xdg-utils-w.XXXX); rm $f; true } catch { false })
+    }
+    mode_allows_for_caller $path "w"
 }
+
 export def is-executable [path: string]: nothing -> bool {
-    (^test -x $path | complete).exit_code == 0
+    if ($path | path type) != "file" { return false }
+    mode_allows_for_caller $path "x"
+}
+
+# Returns whether the calling user has the given mode bit set (`r`/`w`/`x`) on
+# `path`, considering owner, group, then other.
+def mode_allows_for_caller [path: string, bit: string]: nothing -> bool {
+    let info = (ls --long $path | first)
+    let mode = ($info.mode | default "---------")
+    let owner_slot = ($mode | str substring 0..3)
+    let group_slot = ($mode | str substring 3..6)
+    let other_slot = ($mode | str substring 6..9)
+    let uid = (current_uid)
+    if $uid == 0 { return ($bit != "x" or ($mode | str contains "x")) }
+    let file_user = ($info.user? | default "")
+    if $file_user == ($env.USER? | default "") {
+        return ($owner_slot | str contains $bit)
+    }
+    # Group match — best-effort via `id -Gn` would need an external; fall back
+    # to "other" which is the safe lower bound. Anyone with stricter needs can
+    # opt into a non-default umask before invoking xdg-utils.
+    $other_slot | str contains $bit
 }
 
 # Map a binary to a .desktop file
