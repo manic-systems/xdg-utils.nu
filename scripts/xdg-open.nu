@@ -431,7 +431,7 @@ def --env compute_desktop_command [
 # Recursively search .desktop file
 # Open a file using a desktop file entry
 # (desktop_file, file, uri (optional))
-def --env open_with_desktop_file [desktop_file: string, file: string, uri: string = ] {
+def --env open_with_desktop_file [desktop_file: string, file: string, uri: string = ""] {
     let hostname = (get_hostname)
     let result = (compute_desktop_command $desktop_file $file $uri $hostname)
     if not $result.ok {
@@ -450,7 +450,7 @@ def --env search_desktop_file [
     default: string
     dir: string
     target: string
-    target_uri: string = 
+    target_uri: string = ""
 ] {
     let candidate = ($dir | path join $default)
     if not ((is-file $candidate) and ($candidate | path parse | get extension) == "desktop") {
@@ -473,7 +473,7 @@ def --env search_desktop_file [
 }
 # Open using xdg-mime
 # (file (or empty), mimetype, optional url)
-def --env open_generic_xdg_mime [file: string, filetype: string, url: string = ] {
+def --env open_generic_xdg_mime [file: string, filetype: string, url: string = ""] {
     let default_app = (
         ^xdg-mime query default $filetype | complete | get stdout | str trim
     )

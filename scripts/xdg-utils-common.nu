@@ -1,5 +1,5 @@
 # Common utility functions for xdg-utils scripts in Nushell
-export const XDG_UTILS_VERSION "1.2.1"
+export const XDG_UTILS_VERSION = "1.2.1"
 # Debug output based on XDG_UTILS_DEBUG_LEVEL
 export def DEBUG [level: int, ...args] {
     let raw = ($env.XDG_UTILS_DEBUG_LEVEL? | default "")
