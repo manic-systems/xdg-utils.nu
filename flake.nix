@@ -6,8 +6,10 @@
   in {
     packages = forAllSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      mk = coreutils: pkgs.callPackage ./nix/package.nix {inherit coreutils;};
     in {
-      default = pkgs.callPackage ./nix/package.nix {};
+      default = mk pkgs.coreutils;
+      uutils = mk pkgs.uutils-coreutils-noprefix;
     });
   };
 }
