@@ -133,11 +133,12 @@ def shell-words [s: string]: nothing -> list<string> {
 
 # Generic terminal
 def --env terminal_generic [command: string] {
-    # if $TERM is a known non-command, use hard-coded fallbacks
-    let term = if ($env.TERM | is-empty) or ($env.TERM == "linux") or ($env.TERM == "vt100") {
+    # if $TERM is unset or a known non-command, use hard-coded fallbacks
+    let term_env = ($env.TERM? | default "")
+    let term = if ($term_env | is-empty) or ($term_env == "linux") or ($term_env == "vt100") {
         "xterm"
     } else {
-        $env.TERM
+        $term_env
     }
 
     let terminal_exec = (which $term | get 0?.path | default "")
@@ -240,7 +241,7 @@ def --wrapped main [...args] {
     }
 
     detectDE
-    if ($env.DE? == null) or ($env.DE | is-empty) {
+    if ($env.DE? | default "" | is-empty) {
         $env.DE = "generic"
     }
 

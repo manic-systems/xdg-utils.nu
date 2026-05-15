@@ -55,10 +55,7 @@ def --wrapped main [...args] {
         } else {
             match $parm {
                 "--" => { $past_double_hyphen = true }
-                "--get-backend" => {
-                    xdg_realpath "/" | ignore
-                    print $env.XDG_UTILS_REALPATH_BACKEND
-                }
+                "--get-backend" => { print "nushell" }
                 _ => {
                     let code = (run_realpath $parm)
                     if $code != 0 {

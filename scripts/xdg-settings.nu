@@ -30,7 +30,8 @@ def --env fix_local_desktop_file [desktop_file: string, mimetype: string] {
         return
     }
 
-    let mimetypes_raw = (^grep "^MimeType=" $local_file | complete | get stdout | str trim)
+    let all_lines = (open --raw $local_file | lines)
+    let mimetypes_raw = ($all_lines | where {|l| $l | str starts-with "MimeType=" } | get 0? | default "" | str trim)
     let mimetypes = if ($mimetypes_raw | str contains "=") {
         $mimetypes_raw | split row "=" | skip 1 | str join "="
     } else {
@@ -41,8 +42,8 @@ def --env fix_local_desktop_file [desktop_file: string, mimetype: string] {
         return
     }
 
-    let temp = (^mktemp $"($apps_dir)/($desktop_file).XXXXXX" | complete | get stdout | str trim)
-    ^grep -v "^MimeType=" $local_file | save --force $temp
+    let temp = (mktemp --tmpdir-path $apps_dir $"($desktop_file).XXXXXX")
+    $all_lines | where {|l| not ($l | str starts-with "MimeType=") } | str join "\n" | save --force $temp
     let old_lines = (open --raw $local_file | lines | length)
     let new_lines = (open --raw $temp | lines | length)
 
@@ -81,7 +82,7 @@ def --env set_browser_mime [desktop_file: string, ...mimetype: string] {
     # Fixing the local desktop file can actually change the default browser all
     # by itself, so we fix it only after querying to find the current default.
     fix_local_desktop_file $desktop_file $mime
-    ^mkdir -p ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "applications")
+    mkdir ($env.XDG_DATA_HOME? | default ($env.HOME | path join ".local" "share") | path join "applications")
     let result = (^xdg-mime default $desktop_file $mime | complete)
     if ($result.exit_code) != 0 {
         return
@@ -116,7 +117,18 @@ def --env read_kde_config [configfile: string, section: string, key: string] {
         let config_dir = (^kde4-config --path config 2>/dev/null | complete | get stdout | split row ":" | get 0)
         let config_path = ($config_dir | path join $configfile)
         if ($config_path | path type) == "file" {
-            let localized = (^grep $"^($key)\\[\\$[^]=]*\\]=" $config_path | complete | get stdout | ^head -n 1 | complete | get stdout | split row "=" | skip 1 | str join "=" | str trim)
+            let key_pattern = '^' + $key + '\[\$[^]=]*\]='
+            let localized = (
+                open --raw $config_path
+                | lines
+                | where {|l| $l =~ $key_pattern }
+                | get 0?
+                | default ""
+                | split row "="
+                | skip 1
+                | str join "="
+                | str trim
+            )
             if not ($localized | is-empty) {
                 print $localized
             }
@@ -223,11 +235,14 @@ def --env set_browser_kde [desktop_file: string] {
 def --env read_deepin_browser [] {
     let ret = (get_browser_mime "x-scheme-handler/http")
     if ($ret | is-empty) {
-        let result = (^dbus-send --print-reply=literal --dest=com.deepin.daemon.Mime /com/deepin/daemon/Mime com.deepin.daemon.Mime.GetDefaultApp string:"x-scheme-handler/http" | complete)
+        let result = (^gdbus call --session --dest com.deepin.daemon.Mime --object-path /com/deepin/daemon/Mime --method com.deepin.daemon.Mime.GetDefaultApp '"x-scheme-handler/http"' | complete)
         if ($result.exit_code) != 0 {
             exit_failure_operation_failed
         }
-        print ($result.stdout | ^jq -r ".Id" | complete | get stdout | str trim)
+        # gdbus prints the reply as a single-element tuple with the value in
+        # single quotes, e.g. `('name.desktop',)`.
+        let id = ($result.stdout | parse --regex "'(?P<v>[^']*)'" | get v? | get 0? | default "")
+        print $id
         return
     }
     print $ret
@@ -407,7 +422,7 @@ def --env get_browser_xfce [] {
     for dir in $search_dirs {
         let file = ($dir | path join "xfce4" "helpers.rc")
         if ($file | path type) == "file" {
-            let webbrowser_raw = (^grep "^WebBrowser=" $file | complete | get stdout | str trim)
+            let webbrowser_raw = (open --raw $file | lines | where {|l| $l | str starts-with "WebBrowser=" } | get 0? | default "" | str trim)
             let webbrowser = if ($webbrowser_raw | str contains "=") {
                 $webbrowser_raw | split row "=" | skip 1 | str join "=" | str trim
             } else {
@@ -436,16 +451,16 @@ def --env check_browser_xfce [desktop_file: string] {
 # Set browser on XFCE
 def --env set_browser_xfce [desktop_file: string] {
     let helper_dir = ((get_xdg_config_home) | path join "xfce4")
-    ^mkdir -p $helper_dir
+    mkdir $helper_dir
     let helpers_rc = ($helper_dir | path join "helpers.rc")
-    if not ($helpers_rc | path type) == "file" {
+    if ($helpers_rc | path type) != "file" {
         touch $helpers_rc
     }
 
-    let temp = (^mktemp $"($helpers_rc).XXXXXX" | complete | get stdout | str trim)
-    ^grep -v "^WebBrowser=" $helpers_rc | save --force $temp
+    let temp = (mktemp --tmpdir-path ($helpers_rc | path dirname) $"($helpers_rc | path basename).XXXXXX")
+    open --raw $helpers_rc | lines | where {|l| not ($l | str starts-with "WebBrowser=") } | str join "\n" | save --force $temp
     # Atomically swap the filtered temp file in for the live helpers.rc.
-    ^mv $temp $helpers_rc
+    mv $temp $helpers_rc
     print --stderr "Setting browser to xfce4-web-browser.desktop to make setting effective ..."
     set_browser_generic "xfce4-web-browser.desktop"
 }

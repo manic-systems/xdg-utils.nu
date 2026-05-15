@@ -130,12 +130,12 @@ def --env open_gnome3 [mailto: string, attach: string] {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^gio help open | complete).exit_code == 0 {
+    let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (^gvfs-open --help | complete).exit_code == 0 {
-        ^gvfs-open $mailto | complete
-    } else {
+    } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
+    } else {
+        exit_failure_operation_impossible $"no method available for opening '($mailto)'"
     }
 
     if ($result.exit_code) == 0 {
@@ -146,17 +146,19 @@ def --env open_gnome3 [mailto: string, attach: string] {
 
 # Open email on GNOME
 def --env open_gnome [mailto: string, attach: string] {
-    let client = (^gconftool-2 --get /desktop/gnome/url-handlers/mailto/command | complete | get stdout | split row " " | get 0?)
+    let client = if (which gconftool-2 | is-not-empty) {
+        ^gconftool-2 --get /desktop/gnome/url-handlers/mailto/command | complete | get stdout | split row " " | get 0?
+    } else { null }
     if not ($client | default "" | is-empty) and (($client | str contains "thunderbird") or ($client | str contains "icedove")) {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^gio help open | complete).exit_code == 0 {
+    let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (^gvfs-open --help | complete).exit_code == 0 {
-        ^gvfs-open $mailto | complete
-    } else {
+    } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
+    } else {
+        exit_failure_operation_impossible $"no method available for opening '($mailto)'"
     }
 
     if ($result.exit_code) == 0 {
@@ -167,13 +169,15 @@ def --env open_gnome [mailto: string, attach: string] {
 
 # Open email on LXQt
 def --env open_lxqt [mailto: string, attach: string] {
-    let desktop = (^qtxdg-mat def-email-client | complete | get stdout | str trim)
+    let desktop = if (which qtxdg-mat | is-not-empty) {
+        ^qtxdg-mat def-email-client | complete | get stdout | str trim
+    } else { "" }
     let client = (desktop_file_to_binary $desktop)
     if not ($client | default "" | is-empty) and (($client | str contains "thunderbird") or ($client | str contains "icedove")) {
         run_thunderbird $client $mailto $attach
     }
 
-    let result = if (^qtxdg-mat open --help | complete).exit_code == 0 {
+    let result = if (which qtxdg-mat | is-not-empty) {
         (^qtxdg-mat open $mailto | complete)
     } else {
         exit_failure_operation_impossible $"no method available for opening '($mailto)'"
@@ -235,52 +239,32 @@ def --env open_generic [mailto: string, attach: string] {
     exit_failure_operation_failed
 }
 
-# URL encode string
-def --env url_encode [input: string] {
-    # Save original locale settings
-    let orig_lang = ($env.LANG? | default "")
-    let orig_lc_all = ($env.LC_ALL? | default "")
-
-    $env.LANG = "C"
-    $env.LC_ALL = "C"
-
-    let input_str = if ($env.utf8? | default "") == "cat" {
-        $input
-    } else {
-        ($input | ^iconv -t utf8 | complete | get stdout)
-    }
-
-    let encoded = ($input_str | ^awk '
-BEGIN {
-    for ( i=1; i<=255; ++i ) ord [ sprintf ("%c", i) "" ] = i + 0
-    e = ""
-    linenr = 1
-}
-{
-    if ( linenr++ != 1 ) {
-        e = e "%0D%0A"
-    }
-    for ( i=1; i<=length ($0); ++i ) {
-        c = substr ($0, i, 1)
-        if ( ord [c] > 127 ) {
-            e = e "%" sprintf("%02X", ord [c])
-        } else if ( c ~ /[@a-zA-Z0-9.\-\\\/]/ ) {
-            e = e c
-        } else {
-            e = e "%" sprintf("%02X", ord [c])
+# Percent-encode a mailto: body byte-by-byte. Preserves `@`, alphanumerics,
+# `.`, `-`, `\` and `/`, joins lines with `%0D%0A`, and encodes everything else.
+def percent_encode_mailto_body [s: string]: nothing -> string {
+    let pieces = ($s | lines | each {|line|
+        let bin = ($line | encode utf-8)
+        0..<($bin | length)
+        | each {|i|
+            let slice = ($bin | bytes at $i..$i)
+            let hex = ($slice | encode hex)
+            let b = ($hex | into int --radix 16)
+            if $b < 128 {
+                let c = ($slice | decode)
+                if $c =~ '[@a-zA-Z0-9.\-\\/]' { $c } else { $"%($hex)" }
+            } else {
+                $"%($hex)"
+            }
         }
-    }
+        | str join ""
+    })
+    $pieces | str join "%0D%0A"
 }
-END {
-    print e
-}
-' | complete | get stdout | str trim)
 
-    # Restore original locale settings
-    $env.LANG = $orig_lang
-    $env.LC_ALL = $orig_lc_all
-
-    $encoded
+# URL encode string. Nushell strings are already UTF-8, so the locale dance
+# from the shell version is unnecessary.
+def url_encode [input: string]: nothing -> string {
+    percent_encode_mailto_body $input
 }
 
 # xdg-email - command line tool for sending mail using the user's preferred e-mail composer
@@ -420,7 +404,7 @@ def --wrapped main [...args] {
         $env.DE = "envvar"
     }
 
-    match $env.DE {
+    match ($env.DE? | default "") {
         "envvar" => {
             if not ($attach | is-empty) {
                 exit_failure_operation_impossible "Unable to use --attach with the MAILER environment variable"

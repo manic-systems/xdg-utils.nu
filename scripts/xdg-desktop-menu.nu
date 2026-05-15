@@ -24,17 +24,16 @@ def --env update_desktop_database [mode: string] {
 # mode: Installation mode (user or system)
 def --env make_lazy_default [dir: string, basefile: string, mode: string] {
     DEBUG 1 $"make_lazy_default ($dir)/($basefile)"
-    let mimetypes = (^awk '
-{
-    if (match($0,/MimeType=/)) {
-        split(substr($0,RSTART+9),mimetypes,";")
-        for (n in mimetypes) {
-            if (mimetypes[n])
-                print mimetypes[n]
+    let mimetypes = (
+        open --raw ($dir | path join $basefile)
+        | lines
+        | each {|l|
+            let idx = ($l | str index-of "MimeType=")
+            if $idx < 0 { return [] }
+            $l | str substring (($idx + 9)..) | split row ";" | where { not ($in | is-empty) }
         }
-    }
-}
-' ($dir | path join $basefile) | complete | get stdout | split row "\n" | where { not ($in | is-empty) })
+        | flatten
+    )
 
     for MIME in $mimetypes {
         mut xdg_default_dirs = if (not ($env.XDG_DATA_DIRS? == null) and not ($env.XDG_DATA_DIRS | is-empty)) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
@@ -46,10 +45,14 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
         mut default_app = ""
         for x in ($xdg_default_dirs | split row ":") {
             DEBUG 2 $"Checking ($x)/applications/defaults.list"
-            let grep_out = (^grep $"($MIME)=" ($x | path join "applications" "defaults.list") | complete)
-            let entry = if $grep_out.exit_code == 0 {
-                $grep_out.stdout | str trim | split row "=" | skip 1 | str join "="
+            let defaults_path = ($x | path join "applications" "defaults.list")
+            let needle = $"($MIME)="
+            let match = if ($defaults_path | path type) == "file" {
+                open --raw $defaults_path | lines | where {|l| $l | str contains $needle } | get 0? | default ""
             } else { "" }
+            let entry = if ($match | is-empty) { "" } else {
+                $match | str trim | split row "=" | skip 1 | str join "="
+            }
             if not ($entry | is-empty) {
                 DEBUG 2 $"Found default apps for ($MIME): ($entry)"
                 $default_app = $"($entry);"
@@ -63,13 +66,14 @@ def --env make_lazy_default [dir: string, basefile: string, mode: string] {
             if not ($default_file | is-empty) and ($default_file | path type) == "file" {
                 DEBUG 1 $"Updating ($default_file)"
                 let new_file = $"($default_file).new"
-                ^grep -v $"($MIME)=" $default_file | save --force $new_file
-                let has_header = (^grep "[Default Applications]" $new_file | complete).exit_code == 0
+                let needle = $"($MIME)="
+                open --raw $default_file | lines | where {|l| not ($l | str contains $needle) } | str join "\n" | save --force $new_file
+                let has_header = (open --raw $new_file | str contains "[Default Applications]")
                 if not $has_header {
                     "[Default Applications]\n" | save --append $new_file
                 }
                 $"($MIME)=($default_app)($basefile)\n" | save --append $new_file
-                ^mv $new_file $default_file
+                mv $new_file $default_file
             }
         }
     }
@@ -107,14 +111,14 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
 
     if ($menu_file | is-empty) {
         mkdir $xdg_dir
-        ^touch ($xdg_dir | path join "xdg-utils-dummy.menu")
+        touch ($xdg_dir | path join "xdg-utils-dummy.menu")
         return
     }
 
     # Mandriva workaround
     if $action == "install" and (("/etc/mandrake-release" | path type) == "file") {
         let mandrake_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "applications-mdk-merged")
-        if not ($mandrake_xdg_dir | path type) == "dir" {
+        if ($mandrake_xdg_dir | path type) != "dir" {
             DEBUG 1 $"Mandriva Workaround: Link '($xdg_dir)' to '($mandrake_xdg_dir)'"
             mkdir ($mandrake_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $mandrake_xdg_dir }
@@ -124,7 +128,7 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     # Fedora Core 5 + patched KDE workaround (user mode)
     if $action == "install" and $mode == "user" and (("/etc/xdg/menus/kde-applications-merged" | path type) == "dir") {
         let kde_xdg_dir = ($xdg_dir | str replace --all "applications-merged" "kde-applications-merged")
-        if not ($kde_xdg_dir | path type) == "dir" {
+        if ($kde_xdg_dir | path type) != "dir" {
             DEBUG 1 $"Fedora Workaround: Link '($xdg_dir)' to '($kde_xdg_dir)'"
             mkdir ($kde_xdg_dir | path dirname)
             try { ^ln -s "applications-merged" $kde_xdg_dir }
@@ -140,16 +144,9 @@ def --env update_submenu [menu_file: string, mode: string, action: string, deskt
     let orig_menu_file = ($xdg_dir | path join $menu_file)
     DEBUG 1 $"Updating ($orig_menu_file)"
 
-    let tmpfile = (^mktemp | complete | get stdout | str trim)
+    let tmpfile = (mktemp)
     if ($orig_menu_file | path type) == "file" {
-        ^awk '
-BEGIN { RS="<" }
-/^Filename/ {
-    if (match($0,/>/)) {
-        print substr($0,RSTART+1)
-    }
-}
-' $orig_menu_file | save --force $tmpfile
+        extract_xml_tag_contents $orig_menu_file "Filename" | save --force $tmpfile
     }
 
     let orig_desktop_files = (open --raw $tmpfile | split row "\n" | where { not ($in | is-empty) })
@@ -158,7 +155,7 @@ BEGIN { RS="<" }
     if $action == "install" {
         for desktop_file in $desktop_files {
             let basefile = ($desktop_file | path basename)
-            let already_listed = (^grep $"^($basefile)$" $tmpfile | complete).exit_code == 0
+            let already_listed = (open --raw $tmpfile | lines | any {|l| $l == $basefile })
             if not $already_listed {
                 $"($basefile)\n" | save --append $tmpfile
             }
@@ -167,12 +164,13 @@ BEGIN { RS="<" }
     }
 
     if $action == "uninstall" {
-        ^touch $tmpfile
+        touch $tmpfile
         for desktop_file in $desktop_files {
             $"($desktop_file | path basename)\n" | save --append $tmpfile
         }
+        let removed_set = (open --raw $tmpfile | lines)
         for desktop_file in $orig_desktop_files {
-            let is_removed = (^grep $"^($desktop_file)$" $tmpfile | complete).exit_code == 0
+            let is_removed = ($removed_set | any {|l| $l == $desktop_file })
             if not $is_removed {
                 $new_desktop_files = ($new_desktop_files | append $desktop_file)
             }
@@ -184,7 +182,7 @@ BEGIN { RS="<" }
     DEBUG 3 $"Files to list in ($menu_file): ($new_desktop_files)"
 
     if not ($new_desktop_files | is-empty) {
-        let tmpfile = (^mktemp | complete | get stdout | str trim)
+        let tmpfile = (mktemp)
         mkdir $xdg_dir
 
         let menu_header = "<!DOCTYPE Menu PUBLIC \"-//freedesktop//DTD Menu 1.0//EN\"\n    \"http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd\">\n<Menu>\n    <Name>Applications</Name>"
@@ -219,22 +217,17 @@ BEGIN { RS="<" }
 
     # Uninstall .directory files only if no longer referenced
     if $action == "uninstall" {
-        let tmpfile = (^mktemp | complete | get stdout | str trim)
+        let tmpfile = (mktemp)
         for mf in (glob ($xdg_dir | path join "*")) {
-            let referenced = (^grep "xdg-utils" $mf | complete).exit_code == 0
+            let referenced = (open --raw $mf | str contains "xdg-utils")
             if $referenced {
-                ^awk '
-BEGIN { RS="<" }
-/^Directory/ {
-  if (match($0,/>/)) {
-     print substr($0,RSTART+1)
-  }
-}' $mf | save --append $tmpfile
+                extract_xml_tag_contents $mf "Directory" | save --append $tmpfile
             }
         }
+        let referenced_set = (open --raw $tmpfile | lines)
         mut remaining_directory_files: list<string> = []
         for desktop_file in $directory_files {
-            let still_referenced = (^grep $"^($desktop_file)$" $tmpfile | complete).exit_code == 0
+            let still_referenced = ($referenced_set | any {|l| $l == $desktop_file })
             if not $still_referenced {
                 # No longer in use, safe to delete
                 $remaining_directory_files = ($remaining_directory_files | append $desktop_file)
@@ -332,7 +325,7 @@ def --wrapped main [...args] {
     }
 
     if ($mode | is-empty) {
-        if ((^id -u | complete | get stdout | str trim | into int) == 0) {
+        if (current_uid) == 0 {
             $mode = "system"
         } else {
             $mode = "user"

@@ -4,41 +4,12 @@
   nushell,
   makeWrapper,
   coreutils,
-  dbus,
-  file,
-  gawk,
   glib,
-  gnugrep,
-  gnused,
-  hostname,
-  jq,
-  perlPackages,
-  procps,
-  which,
-  xdg-user-dirs,
-  shared-mime-info,
-  xprop,
-  xset,
 }: let
-  perl-with-deps = perlPackages.perl.withPackages (p: [p.NetDBus p.X11Protocol]);
   runtimeDeps = [
     coreutils
-    dbus
-    file
-    gawk
     glib.bin
-    gnugrep
-    gnused
-    hostname
-    jq
     nushell
-    perl-with-deps
-    procps
-    which
-    xdg-user-dirs
-    shared-mime-info
-    xprop
-    xset
   ];
 in
   stdenvNoCC.mkDerivation {

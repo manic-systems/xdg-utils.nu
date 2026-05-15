@@ -70,7 +70,7 @@ def need_kde_icon_path [path: string] {
 }
 
 def update_icon_database [dir: string] {
-    ^touch ($dir | path join "xdg-utils-dummy")
+    touch ($dir | path join "xdg-utils-dummy")
     rm --force ($dir | path join "xdg-utils-dummy")
 
    # Don't create a cache if there wan't one already
@@ -207,7 +207,7 @@ def --wrapped main [...args] {
     }
 
     if ($mode | is-empty) {
-        if (^whoami | complete | get stdout | str trim) == "root" {
+        if (current_uid) == 0 {
             $mode = "system"
         } else {
             $mode = "user"
