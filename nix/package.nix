@@ -5,14 +5,12 @@
   makeWrapper,
   coreutils,
   glib,
-  xprop,
   xset,
 }: let
   runtimeDeps = [
     coreutils
     glib.bin
     nushell
-    xprop
     xset
   ];
 in
