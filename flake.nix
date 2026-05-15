@@ -24,5 +24,18 @@
       inherit (pkgs) xdg-utils-nu xdg-utils-nu-uutils;
       default = pkgs.xdg-utils-nu;
     });
+
+    devShells = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      default = pkgs.mkShell {
+        name = "xdg-utils-nu";
+
+        strictDeps = true;
+        nativeBuildInputs = [
+          pkgs.nufmt
+        ];
+      };
+    });
   };
 }
