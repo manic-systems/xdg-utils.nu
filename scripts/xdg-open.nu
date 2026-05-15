@@ -508,7 +508,7 @@ def --env open_envvar [url: string] {
 
         if ($browser | str contains "%s") {
             # Substitute %s with the URL, then split into argv and exec directly.
-            let formatted = (^printf $browser $url | complete | get stdout | str trim)
+            let formatted = ($browser | str replace "%s" $url)
             if ($formatted | is-empty) { continue }
             let parts = ($formatted | split row " " | where { ($in | is-not-empty) })
             if ($parts | is-empty) { continue }

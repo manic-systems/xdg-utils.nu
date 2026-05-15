@@ -528,46 +528,12 @@ export def --env has_display [] {
     not ($disp | is-empty) or not ($wayland | is-empty)
 }
 
-# Prefixes path with "./" if it starts with "-"
-# This is useful for programs to not confuse paths with options.
-def unoption_path [path: string] {
-    if ($path | str starts-with "-") {
-        $"./($path)"
-    } else {
-        $path
-    }
-}
-
-# Performs a symlink and relative path resolving for a single argument.
-# This will always fail if the given file does not exist!
-export def --env xdg_realpath [path: string] {
-    # allow caching and external configuration
-    if ($env.XDG_UTILS_REALPATH_BACKEND? == null) {
-        if (which realpath | is-not-empty) {
-            let test_result = (^realpath "/" | complete)
-            if ($test_result.exit_code) == 0 and ($test_result.stdout | str trim) == "/" {
-                $env.XDG_UTILS_REALPATH_BACKEND = "realpath"
-            } else {
-                # The realpath took the -- literally, probably the busybox implementation
-                $env.XDG_UTILS_REALPATH_BACKEND = "busybox-realpath"
-            }
-        } else if (which readlink | is-not-empty) {
-            $env.XDG_UTILS_REALPATH_BACKEND = "readlink"
-        } else {
-            exit_failure_operation_impossible "No usable realpath backend found"
-        }
-    }
-
-    # Fail if file doesn't exist
-    if not ($path | path exists) {
-        return
-    }
-
-    match $env.XDG_UTILS_REALPATH_BACKEND {
-        "realpath" => { ^realpath $path }
-        "busybox-realpath" => { ^realpath (unoption_path $path) }
-        "readlink" => { ^readlink -f (unoption_path $path) }
-    }
+# Resolve a path through any symlinks and to an absolute location. Returns
+# nothing when the path doesn't exist, matching the previous external-realpath
+# contract.
+export def xdg_realpath [path: string]: nothing -> string {
+    if not ($path | path exists) { return "" }
+    $path | path expand
 }
 
 # The `which` command but as a shell implementation.

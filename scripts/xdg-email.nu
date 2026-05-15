@@ -261,28 +261,10 @@ def percent_encode_mailto_body [s: string]: nothing -> string {
     $pieces | str join "%0D%0A"
 }
 
-# URL encode string
-def --env url_encode [input: string] {
-    # Save original locale settings
-    let orig_lang = ($env.LANG? | default "")
-    let orig_lc_all = ($env.LC_ALL? | default "")
-
-    $env.LANG = "C"
-    $env.LC_ALL = "C"
-
-    let input_str = if ($env.utf8? | default "") == "cat" {
-        $input
-    } else {
-        ($input | ^iconv -t utf8 | complete | get stdout)
-    }
-
-    let encoded = (percent_encode_mailto_body $input_str)
-
-    # Restore original locale settings
-    $env.LANG = $orig_lang
-    $env.LC_ALL = $orig_lc_all
-
-    $encoded
+# URL encode string. Nushell strings are already UTF-8, so the locale dance
+# from the shell version is unnecessary.
+def url_encode [input: string]: nothing -> string {
+    percent_encode_mailto_body $input
 }
 
 # xdg-email - command line tool for sending mail using the user's preferred e-mail composer
