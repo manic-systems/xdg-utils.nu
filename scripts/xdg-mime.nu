@@ -190,12 +190,8 @@ def --env info_kde [filename: string] {
 
 # Query MIME type using GNOME
 def --env info_gnome [filename: string] {
-    let result = if (^gio help info | complete).exit_code == 0 {
+    let result = if (which gio | is-not-empty) {
         (^gio info $filename | complete | get stdout)
-    } else if (^gvfs-info --help | complete).exit_code == 0 {
-        (^gvfs-info $filename | complete | get stdout)
-    } else if (^gnomevfs-info --help | complete).exit_code == 0 {
-        (^gnomevfs-info --slow-mime $filename | complete | get stdout)
     } else {
         exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
         ""

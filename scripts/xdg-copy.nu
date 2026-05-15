@@ -14,13 +14,10 @@ def --env copy_kde [source: string, dest: string] {
 
 # Copy on GNOME
 def --env copy_gnome [source: string, dest: string] {
-    let result = if (which gio | is-not-empty) {
-        (^gio copy $source $dest | complete)
-    } else if (which gvfs-copy | is-not-empty) {
-        (^gvfs-copy $source $dest | complete)
-    } else {
-        (^gnomevfs-copy $source $dest | complete)
+    if (which gio | is-empty) {
+        exit_failure_operation_impossible $"no method available for copying '($source)' to '($dest)'"
     }
+    let result = (^gio copy $source $dest | complete)
     if ($result.exit_code) == 0 {
         exit_success
     }

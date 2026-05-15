@@ -99,8 +99,6 @@ def --env open_deepin [url: string] {
 def --env open_gnome3 [url: string] {
     let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (which gvfs-open | is-not-empty) {
-        (^gvfs-open $url | complete)
     } else {
         return (open_generic $url)
     }
@@ -116,8 +114,6 @@ def --env open_gnome3 [url: string] {
 def --env open_gnome [url: string] {
     let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (which gvfs-open | is-not-empty) {
-        (^gvfs-open $url | complete)
     } else if (which gnome-open | is-not-empty) {
         (^gnome-open $url | complete)
     } else {
@@ -135,8 +131,6 @@ def --env open_gnome [url: string] {
 def --env open_mate [url: string] {
     let result = if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (which gvfs-open | is-not-empty) {
-        (^gvfs-open $url | complete)
     } else if (which mate-open | is-not-empty) {
         (^mate-open $url | complete)
     } else {
@@ -158,8 +152,6 @@ def --env open_xfce [url: string] {
         (^exo-open $url | complete)
     } else if (which gio | is-not-empty) {
         (^gio open $url | complete)
-    } else if (which gvfs-open | is-not-empty) {
-        (^gvfs-open $url | complete)
     } else {
         return (open_generic $url)
     }

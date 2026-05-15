@@ -132,8 +132,6 @@ def --env open_gnome3 [mailto: string, attach: string] {
 
     let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (which gvfs-open | is-not-empty) {
-        ^gvfs-open $mailto | complete
     } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
     } else {
@@ -157,8 +155,6 @@ def --env open_gnome [mailto: string, attach: string] {
 
     let result = if (which gio | is-not-empty) {
         ^gio open $mailto | complete
-    } else if (which gvfs-open | is-not-empty) {
-        ^gvfs-open $mailto | complete
     } else if (which gnome-open | is-not-empty) {
         ^gnome-open $mailto | complete
     } else {
