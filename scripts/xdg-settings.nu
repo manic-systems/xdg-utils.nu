@@ -94,7 +94,7 @@ def --env set_browser_mime [desktop_file: string, ...mimetype: string] {
 }
 
 # Reads the KDE configuration setting, compensating for a bug in some versions of kreadconfig.
-def --env read_kde_config [configfile: string, section: string, key: string] {
+def --env read_kde_config [configfile: string, section: string, key: string]: nothing -> string {
     let version = ($env.KDE_SESSION_VERSION? | default "" | into int)
     let kreadconfig = if $version == 5 {
         "kreadconfig5"
@@ -104,21 +104,18 @@ def --env read_kde_config [configfile: string, section: string, key: string] {
         "kreadconfig"
     }
 
-    let result = (^$kreadconfig --file $configfile --group $section --key $key 2>/dev/null | complete | get stdout | str trim)
-    if not ($result | is-empty) {
-        print $result
-        return
-    }
+    let result = (^$kreadconfig --file $configfile --group $section --key $key | complete | get stdout | str trim)
+    if not ($result | is-empty) { return $result }
 
     if $version == 4 {
         # kreadconfig in KDE 4 may not notice Key[$*]=... localized settings, so
         # check by hand if it didn't find anything (oddly kwriteconfig works
         # fine though).
-        let config_dir = (^kde4-config --path config 2>/dev/null | complete | get stdout | split row ":" | get 0)
+        let config_dir = (^kde4-config --path config | complete | get stdout | split row ":" | get 0)
         let config_path = ($config_dir | path join $configfile)
         if ($config_path | path type) == "file" {
             let key_pattern = '^' + $key + '\[\$[^]=]*\]='
-            let localized = (
+            return (
                 open --raw $config_path
                 | lines
                 | where {|l| $l =~ $key_pattern }
@@ -129,48 +126,43 @@ def --env read_kde_config [configfile: string, section: string, key: string] {
                 | str join "="
                 | str trim
             )
-            if not ($localized | is-empty) {
-                print $localized
-            }
         }
     }
+    ""
 }
 
 # Resolves the KDE browser setting to a binary: if prefixed with !, simply removes it;
 # otherwise, uses desktop_file_to_binary to get the binary out of the desktop file.
-def --env resolve_kde_browser [browser: string] {
-    if ($browser | is-empty) { return }
+def --env resolve_kde_browser [browser: string]: nothing -> string {
+    if ($browser | is-empty) { return "" }
     if ($browser | str starts-with "!") {
-        print ($browser | str replace --regex "^!" "")
+        $browser | str replace --regex "^!" ""
     } else {
-        desktop_file_to_binary $browser
+        desktop_file_to_binary $browser | default ""
     }
 }
 
 # Does the opposite of resolve_kde_browser: if prefixed with !, tries to find a desktop
 # file corresponding to the binary, otherwise just returns the desktop file name.
-def --env resolve_kde_browser_desktop [browser: string] {
-    if ($browser | is-empty) { return }
+def --env resolve_kde_browser_desktop [browser: string]: nothing -> string {
+    if ($browser | is-empty) { return "" }
     if ($browser | str starts-with "!") {
         let binary = ($browser | str replace --regex "^!" "")
-        let desktop = (binary_to_desktop_file $binary)
-        print ($desktop | path parse | get stem)
+        binary_to_desktop_file $binary | default "" | path parse | get stem
     } else {
-        print $browser
+        $browser
     }
 }
 
 # Read KDE browser
-def --env read_kde_browser [] {
-    mut ret = (get_browser_mime "x-scheme-handler/http")
-    if ($ret | is-empty) {
-        $ret = (read_kde_config "kdeglobals" "General" "BrowserApplication")
-    }
-    print $ret
+def --env read_kde_browser []: nothing -> string {
+    let mime = (get_browser_mime "x-scheme-handler/http")
+    if not ($mime | is-empty) { return $mime }
+    read_kde_config "kdeglobals" "General" "BrowserApplication"
 }
 
 # Get browser on KDE
-def --env get_browser_kde [] {
+def --env get_browser_kde []: nothing -> string {
     let browser = (read_kde_browser | str trim)
     if ($browser | is-empty) {
         get_browser_mime
@@ -232,30 +224,25 @@ def --env set_browser_kde [desktop_file: string] {
 }
 
 # Read Deepin browser
-def --env read_deepin_browser [] {
+def --env read_deepin_browser []: nothing -> string {
     let ret = (get_browser_mime "x-scheme-handler/http")
-    if ($ret | is-empty) {
-        let result = (^gdbus call --session --dest com.deepin.daemon.Mime --object-path /com/deepin/daemon/Mime --method com.deepin.daemon.Mime.GetDefaultApp '"x-scheme-handler/http"' | complete)
-        if ($result.exit_code) != 0 {
-            exit_failure_operation_failed
-        }
-        # gdbus prints the reply as a single-element tuple with the value in
-        # single quotes, e.g. `('name.desktop',)`.
-        let id = ($result.stdout | parse --regex "'(?P<v>[^']*)'" | get v? | get 0? | default "")
-        print $id
-        return
+    if not ($ret | is-empty) { return $ret }
+    let result = (^gdbus call --session --dest com.deepin.daemon.Mime --object-path /com/deepin/daemon/Mime --method com.deepin.daemon.Mime.GetDefaultApp '"x-scheme-handler/http"' | complete)
+    if ($result.exit_code) != 0 {
+        exit_failure_operation_failed
     }
-    print $ret
+    # gdbus prints the reply as a single-element tuple with the value in
+    # single quotes, e.g. `('name.desktop',)`.
+    $result.stdout | parse --regex "'(?P<v>[^']*)'" | get v? | get 0? | default ""
 }
 
 # Get browser on Deepin
-def --env get_browser_deepin [] {
+def --env get_browser_deepin []: nothing -> string {
     let browser = (read_deepin_browser)
-    if not ($browser | is-empty) {
-        print $browser
-        exit_success
+    if ($browser | is-empty) {
+        exit_failure_operation_failed
     }
-    exit_failure_operation_failed
+    $browser
 }
 
 # Check browser on Deepin
@@ -279,7 +266,7 @@ def --env set_browser_deepin [desktop_file: string] {
 }
 
 # Get browser on GNOME
-def --env get_browser_gnome [] {
+def --env get_browser_gnome []: nothing -> string {
     let binary = (^gconftool-2 --get /desktop/gnome/applications/browser/exec | complete | get stdout | str trim)
     if ($binary | is-empty) {
         get_browser_mime
@@ -287,8 +274,7 @@ def --env get_browser_gnome [] {
         # gconftool gives the binary (maybe with %s etc. afterward),
         # but we want the desktop file name, not the binary. So, we
         # have to find the desktop file to which it corresponds.
-        let desktop = (binary_to_desktop_file $binary)
-        print ($desktop | path parse | get stem)
+        binary_to_desktop_file $binary | default "" | path parse | get stem
     }
 }
 
@@ -340,7 +326,7 @@ def --env set_browser_gnome [desktop_file: string] {
 }
 
 # Get browser on GNOME 3.x
-def --env get_browser_gnome3 [] {
+def --env get_browser_gnome3 []: nothing -> string {
     get_browser_mime "x-scheme-handler/http"
 }
 
@@ -375,13 +361,11 @@ def --env set_browser_gnome3 [desktop_file: string] {
 }
 
 # Get browser on LXQt
-def --env get_browser_lxqt [] {
-    if (^qtxdg-mat def-web-browser --help 2>/dev/null | complete | get exit_code) == 0 {
-        let result = (^qtxdg-mat def-web-browser 2>/dev/null | complete | get stdout)
-        print ($result | str trim)
-        exit_success
+def --env get_browser_lxqt []: nothing -> string {
+    if (^qtxdg-mat def-web-browser --help | complete | get exit_code) != 0 {
+        exit_failure_operation_impossible "no method for getting the default browser"
     }
-    exit_failure_operation_impossible "no method for getting the default browser"
+    ^qtxdg-mat def-web-browser | complete | get stdout | str trim
 }
 
 # Check browser on LXQt
@@ -415,23 +399,18 @@ def --env set_browser_lxqt [desktop_file: string] {
 }
 
 # Get browser on XFCE
-def --env get_browser_xfce [] {
+def --env get_browser_xfce []: nothing -> string {
     let xdg_config = (get_xdg_config_home)
-    let search = $"($xdg_config):/etc/xdg"
-    let search_dirs = ($search | split row ":")
+    let search_dirs = ($"($xdg_config):/etc/xdg" | split row ":")
     for dir in $search_dirs {
         let file = ($dir | path join "xfce4" "helpers.rc")
-        if ($file | path type) == "file" {
-            let webbrowser_raw = (open --raw $file | lines | where {|l| $l | str starts-with "WebBrowser=" } | get 0? | default "" | str trim)
-            let webbrowser = if ($webbrowser_raw | str contains "=") {
-                $webbrowser_raw | split row "=" | skip 1 | str join "=" | str trim
-            } else {
-                ""
-            }
-            if not ($webbrowser | is-empty) {
-                print $"($webbrowser).desktop"
-                exit_success
-            }
+        if ($file | path type) != "file" { continue }
+        let webbrowser_raw = (open --raw $file | lines | where {|l| $l | str starts-with "WebBrowser=" } | get 0? | default "" | str trim)
+        let webbrowser = if ($webbrowser_raw | str contains "=") {
+            $webbrowser_raw | split row "=" | skip 1 | str join "=" | str trim
+        } else { "" }
+        if not ($webbrowser | is-empty) {
+            return $"($webbrowser).desktop"
         }
     }
     exit_failure_operation_failed
@@ -466,28 +445,20 @@ def --env set_browser_xfce [desktop_file: string] {
 }
 
 # Get browser generically
-def --env get_browser_generic [mimetype: string] {
+def --env get_browser_generic [mimetype: string]: nothing -> string {
     let mime = if ($mimetype | is-empty) { "x-scheme-handler/http" } else { $mimetype }
     let result = (get_browser_mime $mime)
-    if not ($result | is-empty) {
-        print $result
-        return
-    }
+    if not ($result | is-empty) { return $result }
 
     if not ($env.BROWSER? | default "" | is-empty) {
         let browser = (binary_to_desktop_file ($env.BROWSER | split row ":" | get 0))
-        if not ($browser | is-empty) {
-            print ($browser | path parse | get stem)
-            return
-        }
+        if not ($browser | is-empty) { return ($browser | path parse | get stem) }
     }
 
     # Debian and derivatives have x-www-browser
     let browser = (binary_to_desktop_file "x-www-browser")
-    if not ($browser | is-empty) {
-        print ($browser | path parse | get stem)
-        return
-    }
+    if not ($browser | is-empty) { return ($browser | path parse | get stem) }
+    ""
 }
 
 # Check browser generically
@@ -545,13 +516,11 @@ def --env set_browser_generic [desktop_file: string] {
 }
 
 # URL scheme handler for KDE
-def --env get_url_scheme_handler_kde [scheme: string] {
+def --env get_url_scheme_handler_kde [scheme: string]: nothing -> string {
     if $scheme == "mailto" {
         let handler = (read_kde_config "emaildefaults" "PROFILE_Default" "EmailClient" | str trim)
         if not ($handler | is-empty) {
-            let desktop = (binary_to_desktop_file $handler)
-            print $desktop
-            return
+            return (binary_to_desktop_file $handler | default "")
         }
     }
     get_browser_mime $"x-scheme-handler/($scheme)"
@@ -604,12 +573,10 @@ def --env set_url_scheme_handler_kde [scheme: string, desktop_file: string] {
 }
 
 # Get URL scheme handler for GNOME
-def --env get_url_scheme_handler_gnome [scheme: string] {
+def --env get_url_scheme_handler_gnome [scheme: string]: nothing -> string {
     let binary = (^gconftool-2 --get $"/desktop/gnome/url-handlers/($scheme)/command" | complete | get stdout | str trim)
-    if not ($binary | is-empty) {
-        let desktop = (binary_to_desktop_file $binary)
-        print ($desktop | path parse | get stem)
-    }
+    if ($binary | is-empty) { return "" }
+    binary_to_desktop_file $binary | default "" | path parse | get stem
 }
 
 # Check URL scheme handler for GNOME
@@ -640,13 +607,11 @@ def --env set_url_scheme_handler_gnome [scheme: string, desktop_file: string] {
 }
 
 # Get URL scheme handler for LXQt
-def --env get_url_scheme_handler_lxqt [scheme: string] {
-    if (^qtxdg-mat defapp --help 2>/dev/null | complete | get exit_code) == 0 {
-        let result = (^qtxdg-mat defapp $"x-scheme-handler/($scheme)" 2>/dev/null | complete | get stdout)
-        print ($result | str trim)
-        exit_success
+def --env get_url_scheme_handler_lxqt [scheme: string]: nothing -> string {
+    if (^qtxdg-mat defapp --help | complete | get exit_code) != 0 {
+        exit_failure_operation_impossible "no method for getting the url_scheme_handler"
     }
-    exit_failure_operation_impossible "no method for getting the url_scheme_handler"
+    ^qtxdg-mat defapp $"x-scheme-handler/($scheme)" | complete | get stdout | str trim
 }
 
 # Check URL scheme handler for LXQt
@@ -677,7 +642,7 @@ def --env set_url_scheme_handler_lxqt [scheme: string, desktop_file: string] {
 }
 
 # Get URL scheme handler for GNOME 3.x
-def --env get_url_scheme_handler_gnome3 [scheme: string] {
+def --env get_url_scheme_handler_gnome3 [scheme: string]: nothing -> string {
     get_browser_mime $"x-scheme-handler/($scheme)"
 }
 
@@ -707,7 +672,7 @@ def --env set_url_scheme_handler_gnome3 [scheme: string, desktop_file: string] {
 }
 
 # Get URL scheme handler generically
-def --env get_url_scheme_handler_generic [scheme: string] {
+def --env get_url_scheme_handler_generic [scheme: string]: nothing -> string {
     if not ($env.BROWSER? | default "" | is-empty) and (($scheme == "http") or ($scheme == "https")) {
         get_browser_generic $"x-scheme-handler/($scheme)"
     } else {
@@ -763,7 +728,7 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
     # property descriptions with spaces so that it will look nice.
     match $op {
         "get" => {
-            match $parm {
+            let value = match $parm {
                 "default-web-browser" => {
                     match $handler {
                         "kde" => { get_browser_kde }
@@ -781,11 +746,12 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
                         "gnome" => { get_url_scheme_handler_gnome $scheme }
                         "gnome3" => { get_url_scheme_handler_gnome3 $scheme }
                         "lxqt" => { get_url_scheme_handler_lxqt $scheme }
-                        "xfce" => { get_url_scheme_handler_xfce $scheme }
                         _ => { get_url_scheme_handler_generic $scheme }
                     }
                 }
+                _ => { "" }
             }
+            if not ($value | is-empty) { print $value }
         }
         "check" => {
             match $parm {
@@ -809,7 +775,6 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
                         "gnome" => { check_url_scheme_handler_gnome $scheme $desktop }
                         "gnome3" => { check_url_scheme_handler_gnome3 $scheme $desktop }
                         "lxqt" => { check_url_scheme_handler_lxqt $scheme $desktop }
-                        "xfce" => { check_url_scheme_handler_xfce $scheme $desktop }
                         _ => { check_url_scheme_handler_generic $scheme $desktop }
                     }
                 }
@@ -844,7 +809,6 @@ def --env dispatch_specific [handler: string, op: string, parm: string, ...rest]
                         "gnome" => { set_url_scheme_handler_gnome $scheme $desktop_file }
                         "gnome3" => { set_url_scheme_handler_gnome3 $scheme $desktop_file }
                         "lxqt" => { set_url_scheme_handler_lxqt $scheme $desktop_file }
-                        "xfce" => { set_url_scheme_handler_xfce $scheme $desktop_file }
                         _ => { set_url_scheme_handler_generic $scheme $desktop_file }
                     }
                 }
