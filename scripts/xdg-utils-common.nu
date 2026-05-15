@@ -339,10 +339,8 @@ export def --env exit_success [...messages] {
 export def --env exit_failure_syntax [...messages] {
     if not ($messages | is-empty) {
         print --stderr $"xdg-utils: ($messages.0)"
-        print --stderr "Try 'xdg-utils --help' for more information."
-    } else {
-        print "Usage information would be shown here"
     }
+    print --stderr "Try 'xdg-utils --help' for more information."
     exit 1
 }
 

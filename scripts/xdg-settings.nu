@@ -912,7 +912,8 @@ def --wrapped main [...args] {
         "xfce" => { dispatch_specific "xfce" $op $parm ...$rest }
         "generic" => { dispatch_specific "generic" $op $parm ...$rest }
         "enlightenment" => { dispatch_specific "generic" $op $parm ...$rest }
+        _ => { exit_failure_operation_impossible "unknown desktop environment" }
     }
 
-    exit_failure_operation_impossible "unknown desktop environment"
+    exit_success
 }
