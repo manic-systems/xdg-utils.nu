@@ -22,6 +22,7 @@
       pkgs = nixpkgs.legacyPackages.${system}.extend self.overlays.default;
     in {
       inherit (pkgs) xdg-utils-nu xdg-utils-nu-uutils;
+      default = pkgs.xdg-utils-nu;
     });
   };
 }
