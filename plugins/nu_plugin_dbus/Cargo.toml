@@ -1,0 +1,22 @@
+[package]
+name                   = "nu_plugin_dbus"
+description            = "Nushell plugin for communicating with D-Bus"
+authors                = [ "Devyn Cairns <devyn.cairns@gmail.com>", "Amaan Qureshi <git@amaanq.com>" ]
+edition.workspace      = true
+rust-version.workspace = true
+version.workspace      = true
+license.workspace      = true
+keywords               = [ "plugin", "dbus", "nu" ]
+categories             = [ "command-line-utilities" ]
+repository             = "https://github.com/manic-systems/xdg-utils.nu"
+readme                 = "../../README.md"
+
+[dependencies]
+dbus         = "0.9.12"
+nu-plugin    = "0.114.1"
+nu-protocol  = { features = [ "plugin" ], version = "0.114.1" }
+serde        = { features = [ "derive" ], version = "1.0.228" }
+serde-xml-rs = "0.8.2"
+
+[lints]
+workspace = true
