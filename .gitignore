@@ -1,7 +1,7 @@
 *
 
+!/.cade
 !/.editorconfig
-!/.envrc
 !/.gitignore
 !/.rustfmt.toml
 !/.taplo.toml
