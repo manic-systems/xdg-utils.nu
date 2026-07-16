@@ -199,10 +199,10 @@ impl DbusClient {
         if let Some(sig) = &valid_signature
             && sig.len() != args.len()
         {
-            self.error(
+            return Err(self.error(
                 format!("expected {} arguments, got {}", sig.len(), args.len()),
                 context,
-            );
+            ));
         }
 
         // Construct the method call message
@@ -335,13 +335,13 @@ impl DbusClient {
         if let Some(sig) = &valid_signature
             && sig.len() != 1
         {
-            self.error(
+            return Err(self.error(
                 format!(
                     "expected single object signature, but there are {}",
                     sig.len()
                 ),
                 context,
-            );
+            ));
         }
 
         // Construct the method call message

@@ -53,7 +53,11 @@ pub fn from_refarg(refarg: &dyn RefArg, span: Span) -> Result<Value, String> {
             }
         }
         ArgType::Variant => {
-            let inner = refarg.as_iter().unwrap().next().unwrap();
+            let inner = refarg
+                .as_iter()
+                .ok_or_else(|| "Variant container could not be iterated".to_owned())?
+                .next()
+                .ok_or_else(|| "Variant contained no inner value".to_owned())?;
             return from_refarg(inner, span);
         }
         ArgType::Boolean => Value::bool(refarg.as_i64().unwrap() != 0, span),
