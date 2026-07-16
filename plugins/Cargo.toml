@@ -1,6 +1,7 @@
-# Workspace for the xdg-core library and its Nushell plugin front-end.
+# Workspace for the xdg-core library, its Nushell plugin front-end, and the
+# vendored nu_plugin_dbus fork.
 [workspace]
-members  = [ "xdg-core", "nu_plugin_xdg" ]
+members  = [ "xdg-core", "nu_plugin_xdg", "nu_plugin_dbus" ]
 resolver = "2"
 
 [workspace.package]

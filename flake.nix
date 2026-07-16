@@ -33,8 +33,9 @@
 
         strictDeps = true;
         nativeBuildInputs = [
+          pkgs.pkg-config
           pkgs.nufmt
-          (pkgs.writers.writeNuBin "nucheck" ''
+          (pkgs.writers.writeNuBin "nucheck" /* nu */ ''
             glob $"($env.out)/bin/.xdg-*-wrapped"
             | each {|wrapped|
                 let diags = (
@@ -52,6 +53,7 @@
             | ignore
           '')
         ];
+        buildInputs = [pkgs.dbus];
       };
     });
   };
