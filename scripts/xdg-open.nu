@@ -150,8 +150,8 @@ def --env open_enlightenment [url: string] {
         exit_failure_operation_failed
     }
 }
-# Open using D-Bus portal
-def --env open_gdbus [url: string] {
+# Open using the D-Bus desktop portal
+def --env open_portal [url: string] {
     # Normalize local paths into file:// URIs.
     let target = if (is_file_url_or_path $url) {
         let file = (file_url_to_path $url)
@@ -160,77 +160,15 @@ def --env open_gdbus [url: string] {
     } else {
         $url
     }
-    let result = (^gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.portal.OpenURI.OpenURI --timeout 5 "" $target "{}" | complete)
-    if ($result.exit_code) == 0 {
+    let ok = (try {
+        dbus call --dest=org.freedesktop.portal.Desktop --timeout=5sec /org/freedesktop/portal/desktop org.freedesktop.portal.OpenURI OpenURI "" $target {}
+        true
+    } catch { false })
+    if $ok {
         exit_success
     } else {
         exit_failure_operation_failed
     }
-}
-# Resolve Desktop Entry value escapes (\s \n \t \r \\).
-def unescape_desktop_value [v: string]: nothing -> string {
-    let chars = ($v | split chars)
-    let n = ($chars | length)
-    mut out = ""
-    mut i = 0
-    while $i < $n {
-        let c = ($chars | get $i)
-        if $c == "\\" and ($i + 1) < $n {
-            let nx = ($chars | get ($i + 1))
-            $out = $out ++ (match $nx {
-                "s" => " "
-                "n" => "\n"
-                "t" => "\t"
-                "r" => "\r"
-                "\\" => "\\"
-                _ => ""
-            })
-            $i = $i + 2
-        } else {
-            $out = $out ++ $c
-            $i = $i + 1
-        }
-    }
-    $out
-}
-# Split an Exec= value into argv, respecting "double quotes" with backslash
-# escapes. Mirrors the Desktop Entry specification.
-def split_exec_value [v: string]: nothing -> list<string> {
-    mut args: list<string> = []
-    mut current = ""
-    mut in_quote = false
-    mut next_literal = false
-    for c in ($v | split chars) {
-        if $next_literal {
-            $current = $current ++ $c
-            $next_literal = false
-            continue
-        }
-        if $in_quote {
-            if $c == '"' {
-                $args = ($args | append $current)
-                $current = ""
-                $in_quote = false
-            } else if $c == "\\" {
-                $next_literal = true
-            } else {
-                $current = $current ++ $c
-            }
-        } else {
-            if $current == "" and $c == '"' {
-                $in_quote = true
-            } else if $c != " " {
-                $current = $current ++ $c
-            } else if $current != "" {
-                $args = ($args | append $current)
-                $current = ""
-            }
-        }
-    }
-    if $current != "" {
-        $args = ($args | append $current)
-    }
-    $args
 }
 # Decode a file:// URI to a local path, but only if it has no host or names
 # this machine.
@@ -249,52 +187,6 @@ def decode_local_file_uri [uri: string, hostname: string]: nothing -> string {
     if not ($host | is-empty) and $host != "localhost" and $host != $hostname { return "" }
     if ($path | is-empty) { return "" }
     percent_decode $path
-}
-# Expand a single Exec arg, walking it character by character to handle
-# in-text field codes (%f, %u, %c, %%, etc).
-def expand_inline_field_codes [
-    arg: string
-    files: list<string>
-    uris: list<string>
-    name_value: string
-]: nothing -> record {
-    let chars = ($arg | split chars)
-    let n = ($chars | length)
-    mut out = ""
-    mut file_used = 0
-    mut err = ""
-    mut i = 0
-    while $i < $n {
-        let c = ($chars | get $i)
-        if $c != "%" {
-            $out = $out ++ $c
-            $i = $i + 1
-            continue
-        }
-        if ($i + 1) >= $n { break }
-        let code = ($chars | get ($i + 1))
-        $i = $i + 2
-        match $code {
-            "%" => { $out = $out ++ "%" }
-            "f" => {
-                $out = $out ++ ($files | get 0? | default "")
-                $file_used = $file_used + 1
-            }
-            "u" => {
-                $out = $out ++ ($uris | get 0? | default "")
-                $file_used = $file_used + 1
-            }
-            "c" => { $out = $out ++ $name_value }
-            "k" | "d" | "D" | "n" | "N" => { }
-            "i" | "U" | "F" => { $err = $"xdg-open: Field code %($code) must be stand alone as it expands into multiple arguments!" }
-            _ => { $err = $"xdg-open: Unknown field code: %($code) in Exec key!" }
-        }
-    }
-    {
-        arg: $out
-        file_used: $file_used
-        err: $err
-    }
 }
 # Build the argv for opening `file`/`uri` with `desktop_file`. Returns
 # {ok: bool, message: string, cmd: string, args: list<string>}.
@@ -325,33 +217,19 @@ def --env compute_desktop_command [
             $uris = [$file]
         }
     }
-    let entry = (desktop_section_lines $desktop_file "Desktop Entry")
-    mut exec_value = ""
-    mut term_value = ""
-    mut icon_value = ""
-    mut name_value = ""
-    for line in $entry {
-        let m = ($line | parse --regex '^(?P<key>[^#=\[]+)(?:\[(?P<local>[^]=]*)\])?=(?P<value>.*)$' | first?)
-        if $m == null { continue }
-        let key = ($m.key | str trim)
-        let local = ($m.local | default "")
-        let value = $m.value
-        match $key {
-            "Exec" => {
-                if ($exec_value | is-empty) { $exec_value = (unescape_desktop_value $value) }
-            }
-            "Terminal" => {
-                if ($term_value | is-empty) { $term_value = $value }
-            }
-            "Icon" => {
-                if ($icon_value | is-empty) { $icon_value = (unescape_desktop_value $value) }
-            }
-            "Name" => {
-                if ($name_value | is-empty) and ($local | is-empty) { $name_value = (unescape_desktop_value $value) }
-            }
-            _ => { }
-        }
+    # Parsing the Desktop Entry (locale-resolved Exec/Icon/Name/Terminal) and the
+    # field-code expansion both live in the `xdg` plugin now; a read error or a
+    # missing [Desktop Entry] group surfaces as a thrown error we turn into the
+    # same {ok:false} record the caller expects.
+    let parsed = try {
+        xdg desktop parse $desktop_file
+    } catch {|e|
+        {error: $"xdg-open: ($e.msg)"}
     }
+    if ($parsed.error? | is-not-empty) {
+        return {ok: false, message: $parsed.error, cmd: "", args: []}
+    }
+    let exec_value = ($parsed.exec | default "")
     if ($exec_value | is-empty) {
         return {
             ok: false
@@ -360,59 +238,25 @@ def --env compute_desktop_command [
             args: []
         }
     }
-    let raw_args = (split_exec_value $exec_value)
-    mut expanded: list<string> = []
-    if $term_value == "true" {
-        $expanded = ($expanded | append "xdg-terminal")
-    }
-    mut found_codes = 0
-    for arg in $raw_args {
-        if $arg == "%F" {
-            $expanded = ($expanded ++ $files)
-            $found_codes = $found_codes + 1
-            continue
-        }
-        if $arg == "%U" {
-            $expanded = ($expanded ++ $uris)
-            $found_codes = $found_codes + 1
-            continue
-        }
-        if $arg == "%i" {
-            if not ($icon_value | is-empty) {
-                $expanded = ($expanded | append "--icon" | append $icon_value)
-            }
-            continue
-        }
-        let r = (expand_inline_field_codes $arg $files $uris $name_value)
-        if not ($r.err | is-empty) {
-            return {
-                ok: false
-                message: $r.err
-                cmd: ""
-                args: []
-            }
-        }
-        $found_codes = $found_codes + $r.file_used
-        if $found_codes > 1 {
-            return {
-                ok: false
-                message: "xdg-open: More than one file field codes (%f, %F, %u, %U) in Exec key, this .desktop file is invalid!"
-                cmd: ""
-                args: []
-            }
-        }
-        $expanded = ($expanded | append $r.arg)
-    }
-    if $found_codes == 0 {
-        let extra = if not ($files | is-empty) {
-            $files | get 0
+    let icon_value = ($parsed.icon | default "")
+    let name_value = ($parsed.name | default "")
+    # `expand-exec` enforces the spec's quoting, one-file-code, and
+    # standalone-%F/%U/%i rules; %i only emits `--icon` when an Icon= exists.
+    let exp = try {
+        let base = if ($icon_value | is-empty) {
+            xdg desktop expand-exec $exec_value --files $files --urls $uris --name $name_value --desktop-path $desktop_file
         } else {
-            $uris | get 0? | default ""
+            xdg desktop expand-exec $exec_value --files $files --urls $uris --icon $icon_value --name $name_value --desktop-path $desktop_file
         }
-        if not ($extra | is-empty) {
-            $expanded = ($expanded | append $extra)
-        }
+        let full = if $parsed.terminal { ["xdg-terminal"] ++ $base } else { $base }
+        {ok: true, argv: $full, message: ""}
+    } catch {|e|
+        {ok: false, argv: [], message: $"xdg-open: ($e.msg)"}
     }
+    if not $exp.ok {
+        return {ok: false, message: $exp.message, cmd: "", args: []}
+    }
+    let expanded = $exp.argv
     if ($expanded | is-empty) {
         return {
             ok: false
@@ -637,8 +481,8 @@ def --env open_one_argument [url: string] { match ($env.DE? | default "") {
     "enlightenment" => { open_enlightenment $url }
     "cygwin" => { open_cygwin $url }
     "darwin" => { open_darwin $url }
-    "flatpak" => { open_gdbus $url }
-    "toolbx" => { open_gdbus $url }
+    "flatpak" => { open_portal $url }
+    "toolbx" => { open_portal $url }
     "wsl" => { open_wsl $url }
     "generic" => { open_generic $url }
 } }

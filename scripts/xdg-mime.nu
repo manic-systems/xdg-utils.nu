@@ -1,81 +1,6 @@
 #!/usr/bin/env nu
 # xdg-mime - Utility to manipulate MIME related information
 use xdg-utils-common.nu *
-# Read the first value of `mimetype=...` from the [Default Applications]
-# section of a mimeapps.list file. Returns "" when not present.
-def read_mimeapps_default [path: string, mimetype: string]: nothing -> string {
-    let prefix = $"($mimetype)="
-    mut in_default = false
-    mut found = ""
-    for line in (open --raw $path | lines) {
-        if not ($found | is-empty) { break }
-        if ($line | str starts-with "[Default Applications]") {
-            $in_default = true
-            continue
-        }
-        if ($line | str starts-with "[") {
-            $in_default = false
-            continue
-        }
-        if $in_default and ($line | str starts-with $prefix) {
-            $found = ($line | str substring (($prefix | str length)..))
-        }
-    }
-    $found
-}
-# Rewrite a mimeapps.list so that the [Default Applications] entry for
-# `mimetype` becomes `application`. Inserts the section/entry when absent.
-def update_mimeapps_default_application [path: string, mimetype: string, application: string]: nothing -> string {
-    let prefix = $"($mimetype)="
-    let all = (open --raw $path | lines)
-    mut out: list<string> = []
-    mut in_default = false
-    mut saw_default = false
-    mut added = false
-    mut pending_blanks = 0
-    for line in $all {
-        if ($line | str starts-with "[Default Applications]") {
-            for _ in 0..<$pending_blanks { $out = ($out | append "") }
-            $pending_blanks = 0
-            $in_default = true
-            $saw_default = true
-            $out = ($out | append $line)
-            continue
-        }
-        if ($line | str starts-with "[") {
-            if not $added and $in_default {
-                $out = ($out | append $"($prefix)($application)")
-                $added = true
-            }
-            $in_default = false
-            for _ in 0..<$pending_blanks { $out = ($out | append "") }
-            $pending_blanks = 0
-            $out = ($out | append $line)
-            continue
-        }
-        if ($line | is-empty) {
-            $pending_blanks = $pending_blanks + 1
-            continue
-        }
-        for _ in 0..<$pending_blanks { $out = ($out | append "") }
-        $pending_blanks = 0
-        if $in_default and not $added and ($line | str starts-with $prefix) {
-            $out = ($out | append $"($prefix)($application)")
-            $added = true
-        } else {
-            $out = ($out | append $line)
-        }
-    }
-    if not $added {
-        if not $saw_default {
-            $out = ($out | append "")
-            $out = ($out | append "[Default Applications]")
-        }
-        $out = ($out | append $"($prefix)($application)")
-    }
-    for _ in 0..<$pending_blanks { $out = ($out | append "") }
-    ($out | str join "\n") ++ "\n"
-}
 # Rewrite a mimeapps.list so that `application` is the first entry under the
 # [Added Associations] section's `mimetype=...` line. Appends the section/entry
 # when absent, and dedupes the application if already present elsewhere in the
@@ -206,8 +131,16 @@ def --env info_lxqt [filename: string] {
     }
     exit_failure_operation_impossible $"no method available for querying MIME type of '($filename)'"
 }
-# Query MIME type generically using whatever's on PATH.
+# Query MIME type generically. The xdg plugin resolves the common case via
+# globs and magic without a subprocess, and returns nothing when neither
+# recognizes the file, so gio/mimetype get their turn as content-sniffing
+# fallbacks for files the local database can't classify.
 def --env info_generic [filename: string] {
+    let detected_mime = (xdg mime query filetype $filename)
+    if ($detected_mime | is-not-empty) {
+        print $detected_mime
+        exit_success
+    }
     if (which gio | is-not-empty) {
         let result = (^gio info --attributes=standard::content-type $filename | complete)
         if ($result.exit_code) == 0 {
@@ -289,20 +222,11 @@ def --env make_default_lxqt [desktop_file: string, mimetype: string] {
 }
 # Set default application generically
 def --env make_default_generic [desktop_file: string, mimetype: string] {
-    let default_file = ((get_xdg_config_home) | path join "mimeapps.list")
-    let out_file = if ($default_file | path type) == "symlink" {
-        xdg_realpath $default_file
-    } else {
-        $default_file
-    }
     DEBUG 2 $"make_default_generic ($desktop_file) ($mimetype)"
-    DEBUG 1 $"Updating ($out_file)"
-    if (not (is-file $out_file)) {
-        touch $out_file
-    }
-    let new_file = $"($out_file).new"
-    update_mimeapps_default_application $out_file $mimetype $desktop_file | save --force $new_file
-    mv $new_file $out_file
+    # The plugin resolves $XDG_CONFIG_HOME/mimeapps.list (following a symlink to
+    # its real target), rewrites [Default Applications] in place preserving every
+    # other section/key/blank line, and writes atomically via temp + rename.
+    xdg mime set-default $desktop_file $mimetype
 }
 # Extract a `name="value"` or `name='value'` attribute from an XML tag.
 def xml_attr [tag_text: string, name: string]: nothing -> string {
@@ -620,58 +544,22 @@ def --env defapp_fallback [mimetype: string] {
         exit_success
     }
 }
-# Check for the given mimetype in the appropriate mimeapps.list files
-# in the given directory.
-# Prints the name of the desktop file that should handle the given mimetype.
-# Exits on success, returns otherwise.
-# (mimetype, in_directory)
-def --env check_mimeapps_list [mimetype: string, dir: string] {
-    for desktop in (($env.XDG_CURRENT_DESKTOP? | default "" | split row ":") | append "") {
-        let prefix = if (not ($desktop | is-empty)) { ($desktop | str downcase | str replace --all " " "-") } else { "" }
-        let mimeapps_list = ($dir | path join $"($prefix)mimeapps.list")
-        if (is-file $mimeapps_list) {
-            DEBUG 2 $"Checking ($mimeapps_list)"
-            let value = (read_mimeapps_default $mimeapps_list $mimetype)
-            if not ($value | is-empty) {
-                let app_list = ($value | split row ";")
-                for app in $app_list {
-                    if (not ($app | is-empty)) and (desktop_file_to_binary $app | is-not-empty) {
-                        print $app
-                        exit_success
-                    }
-                }
-            }
-        }
-    }
-}
 # Query default application generically
 def --env defapp_generic [mimetype: string] {
-    let xdg_config_home = (get_xdg_config_home)
-    let xdg_config_dirs = ($env.XDG_CONFIG_DIRS? | default "/etc/xdg")
-    let xdg_user_dir = if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
-        $env.HOME | path join ".local" "share"
+    # [Default Applications] resolution across the mimeapps.list chain and the
+    # legacy defaults.list (subclass-aware, installed handlers with an existing
+    # Exec binary only) lives in the plugin. When no explicit default is set,
+    # fall back to the first registered handler (Added Associations /
+    # mimeinfo.cache), then the generic fallback.
+    let default = (xdg mime query default $mimetype)
+    if ($default | is-not-empty) {
+        print $default
+        exit_success
     }
-    let xdg_system_dirs = if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share/:/usr/share/" }
-    for dir in ([$xdg_config_home] | append ($xdg_config_dirs | split row ":") | flatten) { check_mimeapps_list $mimetype $dir }
-    for dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) { check_mimeapps_list $mimetype ($dir | path join "applications") }
-    for base_dir in ([$xdg_user_dir] | append ($xdg_system_dirs | split row ":") | flatten) {
-        for prefix in (($env.XDG_MENU_PREFIX? | default "" | split row ":") | append [""] | flatten) {
-            DEBUG 2 $"Checking ($base_dir)/applications/($prefix)defaults.list and ($base_dir)/applications/($prefix)mimeinfo.cache"
-            let defaults_list = ($base_dir | path join "applications" $prefix "defaults.list")
-            let mimeinfo_cache = ($base_dir | path join "applications" $prefix "mimeinfo.cache")
-            if ((is-file $defaults_list) or (is-file $mimeinfo_cache)) {
-                let needle = $"($mimetype)="
-                let candidate_files = ([$defaults_list, $mimeinfo_cache] | where { (is-file $in) })
-                let matched = ($candidate_files | each {|f| open --raw $f | lines | where {|l| $l | str contains $needle } } | flatten | get 0? | default "")
-                if not ($matched | is-empty) {
-                    let trader_result = ($matched | split row "=" | get 1? | default "" | split row ";" | get 0? | default "")
-                    if not ($trader_result | is-empty) {
-                        print $trader_result
-                        exit_success
-                    }
-                }
-            }
-        }
+    let handler = (xdg mime list-handlers $mimetype | get 0?)
+    if ($handler | is-not-empty) {
+        print $handler
+        exit_success
     }
     defapp_fallback $mimetype
 }
