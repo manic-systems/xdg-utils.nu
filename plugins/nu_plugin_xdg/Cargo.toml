@@ -1,0 +1,20 @@
+[package]
+name                   = "nu_plugin_xdg"
+description            = "Nushell plugin for XDG Desktop"
+authors.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+version.workspace      = true
+license.workspace      = true
+categories             = [ "command-line-utilities" ]
+keywords               = [ "plugin", "xdg", "desktop", "mime", "nu" ]
+repository             = "https://github.com/manic-systems/xdg-utils.nu"
+readme                 = "../../README.md"
+
+[dependencies]
+nu-plugin   = "0.114.1"
+nu-protocol = { features = [ "plugin" ], version = "0.114.1" }
+xdg-core    = { path = "../xdg-core" }
+
+[lints]
+workspace = true

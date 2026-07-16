@@ -1,0 +1,71 @@
+# Workspace for the xdg-core library and its Nushell plugin front-end.
+[workspace]
+members  = [ "xdg-core", "nu_plugin_xdg" ]
+resolver = "2"
+
+[workspace.package]
+authors      = [ "Amaan Qureshi <contact@amaanq.com>" ]
+edition      = "2024"
+keywords     = [ "xdg", "freedesktop", "desktop", "mime" ]
+license      = "MIT"
+rust-version = "1.96.0"
+version      = "0.1.0"
+
+[profile.release]
+codegen-units = 1
+lto           = "fat"
+
+[workspace.lints.clippy]
+cargo    = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+blanket_clippy_restriction_lints = "allow"
+restriction                      = { level = "warn", priority = -1 }
+
+absolute_paths                 = "allow"
+arbitrary_source_item_ordering = "allow"
+arithmetic_side_effects        = "allow"
+as_conversions                 = "allow"
+cast_possible_truncation       = "allow"
+cast_possible_wrap             = "allow"
+error_impl_error               = "allow"
+exhaustive_enums               = "allow"
+exhaustive_structs             = "allow"
+expect_used                    = "allow"
+impl_trait_in_params           = "allow"
+implicit_return                = "allow"
+indexing_slicing               = "allow"
+inline_modules                 = "allow"
+let_underscore_must_use        = "allow"
+let_underscore_untyped         = "allow"
+map_err_ignore                 = "allow"
+min_ident_chars                = "allow"
+missing_asserts_for_indexing   = "allow"
+missing_docs_in_private_items  = "allow"
+missing_errors_doc             = "allow"
+missing_inline_in_public_items = "allow"
+missing_trait_methods          = "allow"
+mod_module_files               = "allow"
+module_name_repetitions        = "allow"
+multiple_crate_versions        = "allow"
+needless_borrowed_reference    = "allow"
+option_if_let_else             = "allow"
+panic                          = "allow"
+partial_pub_fields             = "allow"
+pattern_type_mismatch          = "allow"
+print_stderr                   = "allow"
+pub_use                        = "allow"
+question_mark_used             = "allow"
+ref_patterns                   = "allow"
+semicolon_outside_block        = "allow"
+separated_literal_suffix       = "allow"
+shadow_reuse                   = "allow"
+shadow_unrelated               = "allow"
+single_call_fn                 = "allow"
+single_char_lifetime_names     = "allow"
+std_instead_of_alloc           = "allow"
+std_instead_of_core            = "allow"
+struct_excessive_bools         = "allow"
+tests_outside_test_module      = "allow"
+unwrap_used                    = "allow"
