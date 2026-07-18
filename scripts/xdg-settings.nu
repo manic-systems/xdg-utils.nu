@@ -192,13 +192,12 @@ def --env set_browser_kde [desktop_file: string] {
 def --env read_deepin_browser []: nothing -> string {
     let ret = (get_browser_mime "x-scheme-handler/http")
     if not ($ret | is-empty) { return $ret }
-    let result = (^gdbus call --session --dest com.deepin.daemon.Mime --object-path /com/deepin/daemon/Mime --method com.deepin.daemon.Mime.GetDefaultApp '"x-scheme-handler/http"' | complete)
-    if ($result.exit_code) != 0 {
+    # The plugin returns the method's string result directly.
+    try {
+        dbus call --dest=com.deepin.daemon.Mime /com/deepin/daemon/Mime com.deepin.daemon.Mime GetDefaultApp "x-scheme-handler/http"
+    } catch {
         exit_failure_operation_failed
     }
-    # gdbus prints the reply as a single-element tuple with the value in
-    # single quotes, e.g. `('name.desktop',)`.
-    $result.stdout | parse --regex "'(?P<v>[^']*)'" | get v? | get 0? | default ""
 }
 # Get browser on Deepin
 def --env get_browser_deepin []: nothing -> string {

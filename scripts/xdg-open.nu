@@ -282,8 +282,8 @@ def --env open_with_desktop_file [desktop_file: string, file: string, uri: strin
         print --stderr $result.message
         exit_failure_operation_failed
     }
-    let exec_result = (^$result.cmd ...$result.args | complete)
-    if ($exec_result.exit_code) != 0 {
+    ^$result.cmd ...$result.args
+    if $env.LAST_EXIT_CODE != 0 {
         exit_failure_operation_failed
     }
     exit_success

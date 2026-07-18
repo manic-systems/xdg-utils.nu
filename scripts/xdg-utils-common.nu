@@ -420,7 +420,10 @@ export def --env detectDE [] {
     if ($env.DE? == null) and not ($env.KDE_FULL_SESSION? == null) { $env.DE = "kde" }
     if ($env.DE? == null) and not ($env.GNOME_DESKTOP_SESSION_ID? == null) { $env.DE = "gnome" }
     if ($env.DE? == null) and not ($env.MATE_DESKTOP_SESSION_ID? == null) { $env.DE = "mate" }
-    if ($env.DE? == null) and ((^gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner '"org.gnome.SessionManager"' | complete).exit_code == 0) { $env.DE = "gnome" }
+    if ($env.DE? == null) {
+        let gnome_session = (try { dbus call --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetNameOwner "org.gnome.SessionManager"; true } catch { false })
+        if $gnome_session { $env.DE = "gnome" }
+    }
     if ($env.DE? == null) and not ($env.DESKTOP? == null) and ($env.DESKTOP | str starts-with "Enlightenment") { $env.DE = "enlightenment" }
     if ($env.DE? == null) and not ($env.LXQT_SESSION_CONFIG? == null) { $env.DE = "lxqt" }
     # fallback to checking $DESKTOP_SESSION
