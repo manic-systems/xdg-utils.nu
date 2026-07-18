@@ -182,10 +182,13 @@ def --env open_envvar [mailto: string] {
     }
     exit_failure_operation_failed
 }
-# Open email using D-Bus portal
-def --env open_gdbus [mailto: string] {
-    let result = (^gdbus call --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop --method org.freedesktop.portal.OpenURI.OpenURI "" $mailto "{}" | complete)
-    if ($result.exit_code) == 0 {
+# Open email using the D-Bus desktop portal
+def --env open_portal [mailto: string] {
+    let ok = (try {
+        dbus call --dest=org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.OpenURI OpenURI "" $mailto {}
+        true
+    } catch { false })
+    if $ok {
         exit_success
     }
     exit_failure_operation_failed
@@ -381,13 +384,13 @@ def --wrapped main [...args] {
             if not ($attach | is-empty) {
                 exit_failure_operation_impossible "Unable to use --attach from inside a flatpak"
             }
-            open_gdbus $mailto
+            open_portal $mailto
         }
         "toolbx" => {
             if not ($attach | is-empty) {
                 exit_failure_operation_impossible "Unable to use --attach from inside a flatpak"
             }
-            open_gdbus $mailto
+            open_portal $mailto
         }
         "generic" => { open_generic $mailto $attach }
         "enlightenment" => { open_generic $mailto $attach }

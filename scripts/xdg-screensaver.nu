@@ -22,9 +22,10 @@ def xss_lock_running [xdg_sid: string]: nothing -> bool {
     }
     false
 }
-# Extract a bool from a gdbus method-call reply like `(true,)` or `(false,)`.
-def parse_gdbus_bool [reply: string]: nothing -> string {
-    $reply | parse --regex '\((?P<v>true|false),?\)' | get v? | get 0? | default ""
+# Run a D-Bus method call (which errors on failure) and report it as an exit
+# code: 0 on success, 1 if the call raised.
+def dbus_try [body: closure]: nothing -> int {
+    try { do $body; 0 } catch { 1 }
 }
 # Compute screensaver state file path
 def get_screensaver_file []: nothing -> string {
@@ -112,20 +113,21 @@ def check_window_id [window_id: string] {
 # Freedesktop screensaver — returns exit code int.
 # Suspend/resume are handled in main; only one-shot actions live here.
 def --env screensaver_freedesktop [action: string]: nothing -> int { match $action {
-    "activate" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SetActive true | complete).exit_code }
-    "lock" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.Lock | complete).exit_code }
-    "reset" => { (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.SimulateUserActivity | complete).exit_code }
+    "activate" => { dbus_try { dbus call --dest=org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver SetActive true } }
+    "lock" => { dbus_try { dbus call --dest=org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver Lock } }
+    "reset" => { dbus_try { dbus call --dest=org.freedesktop.ScreenSaver /ScreenSaver org.freedesktop.ScreenSaver SimulateUserActivity } }
     "status" => {
-        let raw = (^gdbus call --session --dest org.freedesktop.ScreenSaver --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.GetActive --timeout 2 | complete)
-        let status = (parse_gdbus_bool $raw.stdout)
-        if $status == "true" {
+        let active = (try { dbus call --dest=org.freedesktop.ScreenSaver --timeout=2sec /ScreenSaver org.freedesktop.ScreenSaver GetActive } catch { null })
+        if $active == true {
             print "enabled"
-        } else if $status == "false" {
+            0
+        } else if $active == false {
             print "disabled"
+            0
         } else {
-            print --stderr $"ERROR: dbus org.freedesktop.ScreenSaver.GetActive returned '($status)'"
+            print --stderr "ERROR: dbus org.freedesktop.ScreenSaver.GetActive failed"
+            1
         }
-        $raw.exit_code
     }
     _ => { 1 }
 } }
@@ -206,18 +208,13 @@ def --env screensaver_xserver [action: string, screensaver_file: string]: nothin
 # GNOME screensaver — returns exit code int.
 # Suspend/resume are handled in main.
 def --env screensaver_gnome_screensaver [action: string]: nothing -> int { match $action {
-    "activate" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive true | complete).exit_code }
-    "lock" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.Lock | complete).exit_code }
-    "reset" => { (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.SetActive false | complete).exit_code }
+    "activate" => { dbus_try { dbus call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver SetActive true } }
+    "lock" => { dbus_try { dbus call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver Lock } }
+    "reset" => { dbus_try { dbus call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver SetActive false } }
     "status" => {
-        let raw = (^gdbus call --session --dest org.gnome.ScreenSaver --object-path /org/gnome/ScreenSaver --method org.gnome.ScreenSaver.GetActive --timeout 2 | complete)
-        let status = (parse_gdbus_bool $raw.stdout)
-        if $status == "true" or $status == "false" {
-            print "enabled"
-        } else {
-            print "disabled"
-        }
-        $raw.exit_code
+        let active = (try { dbus call --dest=org.gnome.ScreenSaver --timeout=2sec /org/gnome/ScreenSaver org.gnome.ScreenSaver GetActive } catch { null })
+        if $active == null { print "disabled" } else { print "enabled" }
+        if $active == null { 1 } else { 0 }
     }
     _ => { 1 }
 } }
@@ -225,33 +222,33 @@ def --env screensaver_gnome_screensaver [action: string]: nothing -> int { match
 # Suspend nudges the screensaver once; sustained inhibition isn't supported
 # without a long-running daemon.
 def --env screensaver_mate_screensaver [action: string]: nothing -> int { match $action {
-    "suspend" | "reset" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SimulateUserActivity | complete).exit_code }
-    "activate" => { (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.SetActive true | complete).exit_code }
+    "suspend" | "reset" => { dbus_try { dbus call --dest=org.mate.ScreenSaver /org/mate/ScreenSaver org.mate.ScreenSaver SimulateUserActivity } }
+    "activate" => { dbus_try { dbus call --dest=org.mate.ScreenSaver /org/mate/ScreenSaver org.mate.ScreenSaver SetActive true } }
     "lock" => { (^mate-screensaver-command --lock | complete).exit_code }
     "status" => {
-        let raw = (^gdbus call --session --dest org.mate.ScreenSaver --object-path /org/mate/ScreenSaver --method org.mate.ScreenSaver.GetActive --timeout 2 | complete)
-        let status = (parse_gdbus_bool $raw.stdout)
-        if $status == "true" or $status == "false" { print "enabled" } else { print "disabled" }
-        $raw.exit_code
+        let active = (try { dbus call --dest=org.mate.ScreenSaver --timeout=2sec /org/mate/ScreenSaver org.mate.ScreenSaver GetActive } catch { null })
+        if $active == null { print "disabled" } else { print "enabled" }
+        if $active == null { 1 } else { 0 }
     }
     _ => { 1 }
 } }
 # Cinnamon screensaver — returns exit code int. Suspend is one-shot.
 def --env screensaver_cinnamon_screensaver [action: string]: nothing -> int { match $action {
-    "suspend" | "reset" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SimulateUserActivity | complete).exit_code }
-    "activate" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.SetActive true | complete).exit_code }
-    "lock" => { (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.Lock '""' | complete).exit_code }
+    "suspend" | "reset" => { dbus_try { dbus call --dest=org.cinnamon.ScreenSaver /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver SimulateUserActivity } }
+    "activate" => { dbus_try { dbus call --dest=org.cinnamon.ScreenSaver /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver SetActive true } }
+    "lock" => { dbus_try { dbus call --dest=org.cinnamon.ScreenSaver /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver Lock "" } }
     "status" => {
-        let raw = (^gdbus call --session --dest org.cinnamon.ScreenSaver --object-path /org/cinnamon/ScreenSaver --method org.cinnamon.ScreenSaver.GetActive --timeout 2 | complete)
-        let status = (parse_gdbus_bool $raw.stdout)
-        if $status == "true" {
+        let active = (try { dbus call --dest=org.cinnamon.ScreenSaver --timeout=2sec /org/cinnamon/ScreenSaver org.cinnamon.ScreenSaver GetActive } catch { null })
+        if $active == true {
             print "enabled"
-        } else if $status == "false" {
+            0
+        } else if $active == false {
             print "disabled"
+            0
         } else {
-            print --stderr $"ERROR: dbus org.cinnamon.ScreenSaver.GetActive returned '($status)'"
+            print --stderr "ERROR: dbus org.cinnamon.ScreenSaver.GetActive failed"
+            1
         }
-        $raw.exit_code
     }
     _ => { 1 }
 } }
@@ -325,27 +322,27 @@ def --wrapped main [...args] {
     }
     detectDE
     let screensaver_file = get_screensaver_file
-    # Detect screensaver implementations
-    let has_gdbus = (which gdbus | is-not-empty)
-    let dbus_owner_exists = {|name| (^gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetNameOwner $'"($name)"' | complete).exit_code == 0 }
+    # Detect screensaver implementations. The dbus plugin is always available,
+    # so a name is "owned" if GetNameOwner returns without erroring.
+    let dbus_owner_exists = {|name| try { dbus call --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetNameOwner $name; true } catch { false } }
     # Consider "xscreensaver" a separate DE
     if (which xscreensaver-command | is-not-empty) and (^xscreensaver-command -version | complete | get stdout | str contains "XScreenSaver") {
         $env.DE = "xscreensaver"
     }
     # Consider "freedesktop-screensaver" a separate DE
-    if $has_gdbus and (do $dbus_owner_exists "org.freedesktop.ScreenSaver") {
+    if (do $dbus_owner_exists "org.freedesktop.ScreenSaver") {
         $env.DE = "freedesktop_screensaver"
     }
     # Consider "gnome-screensaver" a separate DE
-    if $has_gdbus and (do $dbus_owner_exists "org.gnome.ScreenSaver") {
+    if (do $dbus_owner_exists "org.gnome.ScreenSaver") {
         $env.DE = "gnome_screensaver"
     }
     # Consider "mate-screensaver" a separate DE
-    if $has_gdbus and (do $dbus_owner_exists "org.mate.ScreenSaver") {
+    if (do $dbus_owner_exists "org.mate.ScreenSaver") {
         $env.DE = "mate_screensaver"
     }
     # Consider "cinnamon-screensaver" a separate DE
-    if $has_gdbus and (do $dbus_owner_exists "org.cinnamon.ScreenSaver") {
+    if (do $dbus_owner_exists "org.cinnamon.ScreenSaver") {
         $env.DE = "cinnamon"
     }
     # Consider "xautolock" a separate DE
