@@ -280,6 +280,30 @@ impl<'a> MimeStore<'a> {
       out
    }
 
+   /// [`Self::list_handlers`] minus entries marked `NoDisplay` or `Hidden`.
+   #[must_use]
+   pub fn visible_handlers(&self, mimetype: &str) -> Vec<String> {
+      self
+         .list_handlers(mimetype)
+         .into_iter()
+         .filter(|name| !self.hidden_from_menus(name))
+         .collect()
+   }
+
+   fn hidden_from_menus(&self, name: &str) -> bool {
+      let Some(path) = crate::desktop_entry::find_desktop_file(self.dirs, name) else {
+         return false;
+      };
+      let Ok(parsed) = keyfile::parse_path(&path) else {
+         return false;
+      };
+      let Some(group) = parsed.value.group("Desktop Entry") else {
+         return false;
+      };
+      let flag = |key: &str| matches!(group.boolean(key), Ok(Some(true)));
+      flag("NoDisplay") || flag("Hidden")
+   }
+
    /// Parse every `mimeapps.list` in the chain once, in priority order.
    fn mimeapps_files(&self) -> Vec<keyfile::KeyFile> {
       mimeapps_search_paths(self.dirs)
@@ -435,6 +459,11 @@ pub fn query_default(dirs: &XdgDirs, mimetype: &str) -> Option<String> {
 #[must_use]
 pub fn list_handlers(dirs: &XdgDirs, mimetype: &str) -> Vec<String> {
    MimeStore::load(dirs).list_handlers(mimetype)
+}
+
+#[must_use]
+pub fn visible_handlers(dirs: &XdgDirs, mimetype: &str) -> Vec<String> {
+   MimeStore::load(dirs).visible_handlers(mimetype)
 }
 
 #[must_use]
