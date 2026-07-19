@@ -108,7 +108,11 @@ export def is-dir [path: string]: nothing -> bool {
 export def is-readable [path: string]: nothing -> bool {
     if not ($path | path exists) { return false }
     try {
-        open --raw $path | first 0 | ignore
+        if (is-dir $path) {
+            ls $path | ignore
+        } else {
+            open --raw $path | first 0 | ignore
+        }
         true
     } catch { false }
 }
@@ -330,7 +334,7 @@ export def --env exit_failure_file_permission_write [...messages] {
 }
 # Check if input file exists and is readable
 export def --env check_input_file [path: string] {
-    if ((not (is-file $path))) {
+    if not ($path | path exists) {
         exit_failure_file_missing $"file '($path)' does not exist"
     }
     if not (is-readable $path) {
