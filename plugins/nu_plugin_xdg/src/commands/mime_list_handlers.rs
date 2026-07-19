@@ -32,6 +32,7 @@ impl SimplePluginCommand for MimeListHandlers {
             SyntaxShape::String,
             "The MIME type to list registered handlers for",
          )
+         .switch("visible", "Skip entries marked NoDisplay or Hidden", None)
    }
 
    fn description(&self) -> &'static str {
@@ -41,7 +42,9 @@ impl SimplePluginCommand for MimeListHandlers {
    fn extra_description(&self) -> &'static str {
       "Gathers candidates from the whole mimeapps.list chain, defaults first, then added \
        associations, then every mimeinfo.cache. Anything listed under [Removed Associations] or \
-       missing from disk is skipped. The result is de-duplicated and ordered by precedence."
+       missing from disk is skipped. The result is de-duplicated and ordered by precedence. With \
+       --visible, entries marked NoDisplay or Hidden are dropped too, which matters when picking a \
+       handler automatically."
    }
 
    fn search_terms(&self) -> Vec<&str> {
@@ -65,7 +68,11 @@ impl SimplePluginCommand for MimeListHandlers {
    ) -> Result<Value, LabeledError> {
       let dirs = crate::engine_env::xdg_dirs_from_engine(engine)?;
       let mimetype = call.req::<String>(0)?;
-      let handlers = mime::list_handlers(&dirs, &mimetype);
+      let handlers = if call.has_flag("visible")? {
+         mime::visible_handlers(&dirs, &mimetype)
+      } else {
+         mime::list_handlers(&dirs, &mimetype)
+      };
       Ok(Value::list(
          handlers
             .into_iter()

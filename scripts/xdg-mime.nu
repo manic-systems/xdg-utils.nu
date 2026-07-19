@@ -550,13 +550,14 @@ def --env defapp_generic [mimetype: string] {
     # legacy defaults.list (subclass-aware, installed handlers with an existing
     # Exec binary only) lives in the plugin. When no explicit default is set,
     # fall back to the first registered handler (Added Associations /
-    # mimeinfo.cache), then the generic fallback.
+    # mimeinfo.cache), then the generic fallback. Guessed handlers skip
+    # NoDisplay/Hidden entries.
     let default = (xdg mime query default $mimetype)
     if ($default | is-not-empty) {
         print $default
         exit_success
     }
-    let handler = (xdg mime list-handlers $mimetype | get 0?)
+    let handler = (xdg mime list-handlers --visible $mimetype | get 0?)
     if ($handler | is-not-empty) {
         print $handler
         exit_success
