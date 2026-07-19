@@ -22,7 +22,7 @@ def update_mimeapps_added_association [path: string, mimetype: string, applicati
         }
         if ($line | str starts-with "[") {
             if $in_added and not $found {
-                $out = ($out | append $"($prefix)($application)")
+                $out = ($out | append $"($prefix)($application);")
                 $found = true
             }
             $in_added = false
@@ -49,7 +49,7 @@ def update_mimeapps_added_association [path: string, mimetype: string, applicati
     }
     if not $found {
         if not $in_added { $out = ($out | append "[Added Associations]") }
-        $out = ($out | append $"($prefix)($application)")
+        $out = ($out | append $"($prefix)($application);")
     }
     for _ in 0..<$pending_blanks { $out = ($out | append "") }
     ($out | str join "\n") ++ "\n"
@@ -200,7 +200,7 @@ def --env make_default_kde [desktop_file: string, mimetype: string] {
         return
     }
     let default_file = ($default_dir | path join "mimeapps.list")
-    mkdir ($default_dir | path dirname)
+    mkdir $default_dir
     if (not (is-file $default_file)) {
         touch $default_file
     }
@@ -604,8 +604,7 @@ def --env defapp_lxqt [mimetype: string] {
 # Synopsis: xdg-mime install [--mode mode] [--novendor] mimetypes-file
 # Synopsis: xdg-mime uninstall [--mode mode] mimetypes-file
 # Synopsis: xdg-mime { --help | --manual | --version }
-def --wrapped main [...args] {
-    let args = ($args | each { into string })
+def --wrapped main [...args: string] {
     handle_standard_options "xdg-mime" $args [
         "xdg-mime - command line tool for querying information about file type handling and adding descriptions for new file types"
         ""
@@ -734,7 +733,7 @@ def --wrapped main [...args] {
     detectDE
     if $action == "makedefault" {
         # Skip $args.0, which is the .desktop filename already captured above.
-        let mimetypes = ($args | skip 1)
+        let mimetypes = ($args | skip 1 | collect)
         if ($mimetypes | is-empty) {
             exit_failure_syntax "mimetype argument missing"
         }
