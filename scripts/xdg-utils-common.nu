@@ -149,21 +149,27 @@ def mode_allows_for_caller [path: string, bit: string]: nothing -> bool {
     # opt into a non-default umask before invoking xdg-utils.
     $other_slot | str contains $bit
 }
+def application_search_dirs []: nothing -> list<string> {
+    let data_home = if not ($env.XDG_DATA_HOME? == null) {
+        $env.XDG_DATA_HOME
+    } else {
+        $env.HOME | path join ".local" "share"
+    }
+    let data_dirs = ($env.XDG_DATA_DIRS? | default "/usr/local/share:/usr/share" | split row ":")
+    [$data_home] | append $data_dirs
+}
 # Map a binary to a .desktop file
 export def --env binary_to_desktop_file [command_or_path: string] {
     if ($command_or_path | is-empty) {
         DEBUG 2 "binary_to_desktop_file argument is empty"
         return
     }
-    let search = (if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
-        $env.HOME | path join ".local" "share"
-    } | append (if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share:/usr/share" }))
+    let search_dirs = (application_search_dirs)
     let which_result = (which $command_or_path)
     if ($which_result | is-empty) { return }
     let binary = ($which_result | get 0.path)
     let binary_path = (xdg_realpath $binary)
     let base = ($binary_path | path parse | get stem)
-    let search_dirs = ($search | split row ":")
     for dir in $search_dirs {
         if ($dir | is-empty) { continue }
         if (not (is-dir ($dir | path join "applications"))) and (not (is-dir ($dir | path join "applnk"))) { continue }
@@ -201,12 +207,9 @@ export def --env desktop_file_to_binary [desktop_file: string] {
         DEBUG 2 "desktop_file_to_binary argument is empty"
         return null
     }
-    let search = (if not ($env.XDG_DATA_HOME? == null) { $env.XDG_DATA_HOME } else {
-        $env.HOME | path join ".local" "share"
-    } | append (if not ($env.XDG_DATA_DIRS? == null) { $env.XDG_DATA_DIRS } else { "/usr/local/share:/usr/share" }))
+    let search_dirs = (application_search_dirs)
     # Normalize to the full <name>.desktop filename used on disk
     let desktop = if ($desktop_file | str ends-with ".desktop") { $desktop_file } else { $"($desktop_file).desktop" }
-    let search_dirs = ($search | split row ":")
     for dir in $search_dirs {
         DEBUG 2 $"Searching in '($dir)/{applications,applnk}'"
         if ($dir | is-empty) { continue }

@@ -502,7 +502,7 @@ fn unique_sibling(target: &Path) -> PathBuf {
 /// Ensure `[Default Applications]` contains `mimetype=desktop`, replacing any
 /// existing entry. All other content (comments, blank lines, order) is kept.
 fn rewrite_default(contents: &str, mimetype: &str, desktop: &str) -> String {
-   let new_line = format!("{mimetype}={desktop}");
+   let new_line = format!("{mimetype}={desktop};");
    let mut out = Vec::<String>::new();
    let mut in_default = false;
    let mut saw_default = false;
@@ -596,7 +596,7 @@ mod tests {
    fn rewrite_inserts_into_missing_section() {
       let out = rewrite_default("", "text/html", "firefox.desktop");
       assert!(out.contains("[Default Applications]"));
-      assert!(out.contains("text/html=firefox.desktop"));
+      assert!(out.contains("text/html=firefox.desktop;"));
       assert!(out.ends_with('\n'));
    }
 
@@ -611,14 +611,14 @@ image/png=viewer.desktop
 text/html=other.desktop;
 ";
       let out = rewrite_default(original, "text/html", "new.desktop");
-      assert!(out.contains("text/html=new.desktop"));
+      assert!(out.contains("text/html=new.desktop;"));
       assert!(!out.contains("text/html=old.desktop"));
       // Untouched entries and the other section survive.
       assert!(out.contains("image/png=viewer.desktop"));
       assert!(out.contains("[Added Associations]"));
       assert!(out.contains("text/html=other.desktop;"));
       // Exactly one Default mapping for text/html.
-      assert_eq!(out.matches("text/html=new.desktop").count(), 1);
+      assert_eq!(out.matches("text/html=new.desktop;").count(), 1);
    }
 
    #[test]
