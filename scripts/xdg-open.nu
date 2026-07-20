@@ -152,16 +152,11 @@ def --env open_enlightenment [url: string] {
 }
 # Open using the D-Bus desktop portal
 def --env open_portal [url: string] {
-    # Normalize local paths into file:// URIs.
-    let target = if (is_file_url_or_path $url) {
-        let file = (file_url_to_path $url)
-        check_input_file $file
-        $"file://(($file | path expand))"
-    } else {
-        $url
+    if (is_file_url_or_path $url) {
+        return (open_generic $url)
     }
     let ok = (try {
-        dbus call --dest=org.freedesktop.portal.Desktop --timeout=5sec /org/freedesktop/portal/desktop org.freedesktop.portal.OpenURI OpenURI "" $target {}
+        dbus call --dest=org.freedesktop.portal.Desktop --timeout=5sec /org/freedesktop/portal/desktop org.freedesktop.portal.OpenURI OpenURI "" $url {}
         true
     } catch { false })
     if $ok {
