@@ -8,6 +8,7 @@
   }: let
     inherit (nixpkgs) lib;
     forAllSystems = lib.genAttrs lib.platforms.linux;
+    pkgsFor = system: nixpkgs.legacyPackages.${system} or (import nixpkgs {inherit system;});
   in {
     overlays = {
       default = final: _: let
@@ -53,14 +54,14 @@
     };
 
     packages = forAllSystems (system: let
-      pkgs = nixpkgs.legacyPackages.${system}.extend self.overlays.default;
+      pkgs = (pkgsFor system).extend self.overlays.default;
     in {
       inherit (pkgs) xdg-utils-nu xdg-utils-nu-uutils nu_plugin_dbus nu_plugin_xdg;
       default = pkgs.xdg-utils-nu;
     });
 
     devShells = forAllSystems (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
+      pkgs = pkgsFor system;
     in {
       default = pkgs.mkShell {
         name = "xdg-utils-nu";
