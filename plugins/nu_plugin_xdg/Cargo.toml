@@ -12,8 +12,8 @@ repository             = "https://github.com/manic-systems/xdg-utils.nu"
 readme                 = "../../README.md"
 
 [dependencies]
-nu-plugin   = "0.115.0"
-nu-protocol = { features = [ "plugin" ], version = "0.115.0" }
+nu-plugin   = "0.116.1"
+nu-protocol = { features = [ "plugin" ], version = "0.116.1" }
 xdg-core    = { path = "../xdg-core" }
 
 [lints]
