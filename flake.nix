@@ -101,6 +101,8 @@
 
             strictDeps = true;
             nativeBuildInputs = [
+              pkgs.cargo
+              pkgs.rustc
               pkgs.pkg-config
               pkgs.nufmt
               (pkgs.writers.writeNuBin "nucheck" /* nu */ ''
