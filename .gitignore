@@ -2,6 +2,8 @@
 
 !/.cade
 !/.editorconfig
+!/.github/
+!/.github/dependabot.yml
 !/.gitignore
 !/.rustfmt.toml
 !/.taplo.toml
